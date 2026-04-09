@@ -45,6 +45,7 @@ fn main() {
         .init_resource::<TimeRegulation>()
         .init_resource::<SceneManifest>()
         .init_resource::<shape_editor::ShapeInteraction>()
+        .add_observer(ui::on_scroll)
         .add_systems(Startup, (setup, ui::setup_ui).chain())
         .add_systems(
             Update,
@@ -59,6 +60,7 @@ fn main() {
                 ui::update_stats,
                 ui::update_shape_info,
                 ui::toggle_ui,
+                ui::send_scroll_events,
             ),
         )
         .run();

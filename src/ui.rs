@@ -1,6 +1,8 @@
 use bevy::feathers::controls::*;
 use bevy::feathers::theme::*;
 use bevy::feathers::tokens;
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 use bevy::ui::Checked;
 use bevy::ui_widgets::{
@@ -701,5 +703,66 @@ pub fn update_stats(sim_state: Res<SimState>, mut q_stats: Query<&mut Text, With
             sim_state.grid_size[1],
             sim_state.shapes.len()
         );
+    }
+}
+
+// --- UI Scroll support ---
+// Bevy's Overflow::scroll_y() sets layout but doesn't auto-handle scroll events.
+// We need to pipe MouseWheel events into ScrollPosition updates, same as Bevy's scroll example.
+
+const SCROLL_LINE_HEIGHT: f32 = 21.0;
+
+/// Custom scroll event that propagates up the UI hierarchy.
+#[derive(EntityEvent, Debug)]
+#[entity_event(propagate, auto_propagate)]
+pub struct UiScroll {
+    entity: Entity,
+    delta: Vec2,
+}
+
+/// Read mouse wheel events and trigger UiScroll on hovered UI entities.
+pub fn send_scroll_events(
+    mut mouse_wheel: MessageReader<MouseWheel>,
+    hover_map: Res<HoverMap>,
+    mut commands: Commands,
+) {
+    for wheel in mouse_wheel.read() {
+        let mut delta = -Vec2::new(wheel.x, wheel.y);
+        if wheel.unit == MouseScrollUnit::Line {
+            delta *= SCROLL_LINE_HEIGHT;
+        }
+        for pointer_map in hover_map.values() {
+            for &entity in pointer_map.keys() {
+                commands.trigger(UiScroll { entity, delta });
+            }
+        }
+    }
+}
+
+/// Handle UiScroll events by updating ScrollPosition on scrollable nodes.
+pub fn on_scroll(
+    mut scroll: On<UiScroll>,
+    mut query: Query<(&mut ScrollPosition, &Node, &ComputedNode)>,
+) {
+    let Ok((mut scroll_position, node, computed)) = query.get_mut(scroll.entity) else {
+        return;
+    };
+    let max_offset = (computed.content_size() - computed.size()) * computed.inverse_scale_factor();
+    let delta = &mut scroll.delta;
+
+    if node.overflow.y == OverflowAxis::Scroll && delta.y != 0.0 {
+        let at_limit = if delta.y > 0.0 {
+            scroll_position.y >= max_offset.y
+        } else {
+            scroll_position.y <= 0.0
+        };
+        if !at_limit {
+            scroll_position.y += delta.y;
+            delta.y = 0.0;
+        }
+    }
+
+    if *delta == Vec2::ZERO {
+        scroll.propagate(false);
     }
 }
