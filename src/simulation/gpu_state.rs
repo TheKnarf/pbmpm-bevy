@@ -31,6 +31,9 @@ pub struct GpuSimState {
 
     pub bukkit_count_x: u32,
     pub bukkit_count_y: u32,
+
+    // Staging buffer for particle count readback
+    pub particle_count_staging: Option<Buffer>,
 }
 
 impl GpuSimState {
@@ -144,6 +147,13 @@ impl GpuSimState {
             usage: BufferUsages::STORAGE,
             mapped_at_creation: false,
         }));
+
+        self.particle_count_staging = Some(create_4u32_buffer(
+            device,
+            "particle_count_staging",
+            &[0, 0, 0, 0],
+            BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+        ));
 
         self.initialized = true;
     }

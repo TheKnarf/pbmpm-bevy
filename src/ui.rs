@@ -695,13 +695,19 @@ fn save_scene_to_file(state: &SimState, params: &SimParams, width: f32, height: 
 }
 
 /// Update stats label
-pub fn update_stats(sim_state: Res<SimState>, mut q_stats: Query<&mut Text, With<GridStatsLabel>>) {
+pub fn update_stats(
+    sim_state: Res<SimState>,
+    particle_count: Res<ParticleCount>,
+    mut q_stats: Query<&mut Text, With<GridStatsLabel>>,
+) {
     if let Ok(mut text) = q_stats.single_mut() {
+        let count = particle_count.get();
         text.0 = format!(
-            "Grid: {}x{} | Shapes: {}",
+            "Grid: {}x{} | Shapes: {} | Particles: {:.1}k",
             sim_state.grid_size[0],
             sim_state.grid_size[1],
-            sim_state.shapes.len()
+            sim_state.shapes.len(),
+            count as f32 / 1000.0
         );
     }
 }

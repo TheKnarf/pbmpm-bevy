@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::sync::atomic::Ordering;
 
 use bevy::prelude::*;
 use bevy::render::render_graph::{Node, NodeRunError, RenderGraphContext};
@@ -27,6 +28,7 @@ pub struct ExtractedSimData {
     pub mouse_velocity: [f32; 2],
     pub bukkit_count_x: u32,
     pub bukkit_count_y: u32,
+    pub particle_count: ParticleCount,
 }
 
 impl Default for ExtractedSimData {
@@ -45,6 +47,7 @@ impl Default for ExtractedSimData {
             mouse_velocity: [0.0; 2],
             bukkit_count_x: 0,
             bukkit_count_y: 0,
+            particle_count: ParticleCount::default(),
         }
     }
 }
@@ -56,6 +59,7 @@ struct PbmpmNodeInner {
     state: GpuSimState,
     buffer_idx: u32,
     view_target_query: Option<QueryState<&'static ViewTarget>>,
+    readback_frame: u32,
 }
 
 /// The main render graph node that drives simulation compute + particle rendering.
@@ -78,6 +82,7 @@ impl Default for PbmpmNode {
                 state: GpuSimState::default(),
                 buffer_idx: 0,
                 view_target_query: None,
+                readback_frame: 0,
             }),
         }
     }
@@ -656,6 +661,44 @@ impl Node for PbmpmNode {
                 pass.set_pipeline(&pipelines.particle_render);
                 pass.set_bind_group(0, &render_bg, &[]);
                 pass.draw_indirect(state.particle_render_dispatch_buffer.as_ref().unwrap(), 0);
+            }
+        }
+
+        // Readback particle count using two-phase approach:
+        // Even frames: map staging buffer (contains data from previous copy), read, unmap
+        // Odd frames: copy particle count to staging buffer
+        // This ensures we never copy to a mapped buffer.
+        if let (Some(count_buf), Some(staging_buf)) =
+            (&state.particle_count_buffer, &state.particle_count_staging)
+        {
+            this.readback_frame += 1;
+            if this.readback_frame % 60 == 0 {
+                // Phase 1: read from staging (data from a previous copy)
+                let particle_count = data.particle_count.clone();
+                let staging = staging_buf.clone();
+                let staging2 = staging.clone();
+                device.map_buffer(&staging.slice(..), MapMode::Read, move |result| {
+                    if result.is_ok() {
+                        let mapped = staging2.slice(..).get_mapped_range();
+                        if mapped.len() >= 4 {
+                            let count =
+                                u32::from_le_bytes([mapped[0], mapped[1], mapped[2], mapped[3]]);
+                            particle_count
+                                .0
+                                .store(count.min(MAX_PARTICLE_COUNT), Ordering::Relaxed);
+                        }
+                        drop(mapped);
+                        staging2.unmap();
+                    }
+                });
+                // Poll to complete synchronously
+                let _ = device.wgpu_device().poll(PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                });
+            } else if this.readback_frame % 60 == 30 {
+                // Phase 2: copy particle count to staging (will be read in phase 1 later)
+                encoder.copy_buffer_to_buffer(count_buf, 0, staging_buf, 0, 16);
             }
         }
 

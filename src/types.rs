@@ -1,4 +1,7 @@
 #[allow(dead_code)]
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+
 use bevy::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
@@ -275,6 +278,22 @@ pub struct InputState {
     pub mouse_down: bool,
     pub mouse_position: Vec2,
     pub mouse_prev_position: Vec2,
+}
+
+/// Shared particle count for readback from GPU to CPU.
+#[derive(Resource, Clone)]
+pub struct ParticleCount(pub Arc<AtomicU32>);
+
+impl Default for ParticleCount {
+    fn default() -> Self {
+        Self(Arc::new(AtomicU32::new(0)))
+    }
+}
+
+impl ParticleCount {
+    pub fn get(&self) -> u32 {
+        self.0.load(Ordering::Relaxed)
+    }
 }
 
 // Dispatch sizes

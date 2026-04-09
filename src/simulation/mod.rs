@@ -44,10 +44,12 @@ impl Plugin for PbmpmPlugin {
 #[derive(Resource, Default, Clone)]
 struct ExtractedSimDataSource(ExtractedSimData);
 
+#[allow(clippy::too_many_arguments)]
 fn prepare_extracted_data(
     params: Res<SimParams>,
     mut sim_state: ResMut<SimState>,
     input: Res<InputState>,
+    particle_count: Res<ParticleCount>,
     mut time_reg: ResMut<TimeRegulation>,
     time: Res<Time>,
     windows: Query<&Window>,
@@ -164,6 +166,7 @@ fn prepare_extracted_data(
         mouse_velocity: mouse_vel,
         bukkit_count_x,
         bukkit_count_y,
+        particle_count: particle_count.clone(),
     };
 
     // Advance substep index (reset already handled above before extraction)
