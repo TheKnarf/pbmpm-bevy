@@ -1,0 +1,228 @@
+{
+    "version": 2,
+    "resolution": [
+        2335,
+        1313
+    ],
+    "shapes": [
+        {
+            "id": "shape5",
+            "position": {
+                "x": 1104.6080411758678,
+                "y": 608.2879003158532
+            },
+            "rotation": 45.382572231599404,
+            "halfSize": {
+                "x": "22",
+                "y": "148"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape6",
+            "position": {
+                "x": 1008.6083322014946,
+                "y": 445.2620157548362
+            },
+            "rotation": 45.382572231599404,
+            "halfSize": {
+                "x": "22",
+                "y": "192"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape7",
+            "position": {
+                "x": 1134.3741653776472,
+                "y": 30.733960214041467
+            },
+            "rotation": 0.7293645483352325,
+            "halfSize": {
+                "x": "22",
+                "y": "295"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape8",
+            "position": {
+                "x": 1098.079673213692,
+                "y": 483.43069430878154
+            },
+            "rotation": 45.382572231599404,
+            "halfSize": {
+                "x": "22",
+                "y": "148"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape9",
+            "position": {
+                "x": 1223.3805180354366,
+                "y": 614.5949506699322
+            },
+            "rotation": 45.382572231599404,
+            "halfSize": {
+                "x": "22",
+                "y": "140"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape10",
+            "position": {
+                "x": 1022.4063243947573,
+                "y": 706.8212574798979
+            },
+            "rotation": 135.18005264926117,
+            "halfSize": {
+                "x": "22",
+                "y": "198"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape11",
+            "position": {
+                "x": 1770.073018396435,
+                "y": 1220.3581753712451
+            },
+            "rotation": 0,
+            "halfSize": {
+                "x": "493",
+                "y": "28"
+            },
+            "shape": "0",
+            "function": "0",
+            "emitMaterial": "0",
+            "emissionRate": "8.3",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape2",
+            "position": {
+                "x": 1233.3223508682506,
+                "y": 738.127997605638
+            },
+            "rotation": 45.382572231599404,
+            "halfSize": {
+                "x": "22",
+                "y": "124"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape1",
+            "position": {
+                "x": 1330.550362785871,
+                "y": 515.6842555109379
+            },
+            "rotation": 135.18005264926117,
+            "halfSize": {
+                "x": "22",
+                "y": "206"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape12",
+            "position": {
+                "x": 1345.777401110186,
+                "y": 768.5221139132797
+            },
+            "rotation": 45.382572231599404,
+            "halfSize": {
+                "x": "22",
+                "y": "176"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        },
+        {
+            "id": "shape3",
+            "position": {
+                "x": 1225.5544617033306,
+                "y": 1166.4768058437228
+            },
+            "rotation": 0.7293645483352325,
+            "halfSize": {
+                "x": "22",
+                "y": "295"
+            },
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "0",
+            "emissionRate": "1",
+            "radius": 59.2918936029378
+        }
+    ],
+    "settings": [
+        {
+            "name": "simRate",
+            "type": "combo",
+            "value": "480"
+        },
+        {
+            "name": "fixedPointMultiplierExponent",
+            "type": "range",
+            "value": "8"
+        },
+        {
+            "name": "gravityStrength",
+            "type": "range",
+            "value": "2.43"
+        },
+        {
+            "name": "liquidViscosity",
+            "type": "range",
+            "value": "0"
+        },
+        {
+            "name": "borderFriction",
+            "type": "range",
+            "value": "0"
+        },
+        {
+            "name": "renderMode",
+            "type": "combo",
+            "value": "0"
+        }
+    ]
+}

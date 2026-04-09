@@ -1,0 +1,138 @@
+{
+    "version": 2,
+    "resolution": [
+        2560,
+        1313
+    ],
+    "shapes": [
+        {
+            "id": "shape1",
+            "position": {
+                "x": -552.2833333333334,
+                "y": 555.5935185185185
+            },
+            "halfSize": {
+                "x": "1000",
+                "y": "956"
+            },
+            "rotation": 0,
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "3",
+            "emissionRate": "5.3",
+            "radius": 25.46360268556661
+        },
+        {
+            "id": "shape0",
+            "position": {
+                "x": 2101.0499999999997,
+                "y": 626.1064814814815
+            },
+            "halfSize": {
+                "x": "416",
+                "y": "673"
+            },
+            "rotation": 0,
+            "shape": "0",
+            "function": "3",
+            "emitMaterial": "3",
+            "emissionRate": "5.3",
+            "radius": 25.46360268556661
+        },
+        {
+            "id": "shape2",
+            "position": {
+                "x": 1626.3833333333332,
+                "y": 252.8740740740741
+            },
+            "halfSize": {
+                "x": "11",
+                "y": "79"
+            },
+            "rotation": 0,
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "3",
+            "emissionRate": "5.3",
+            "radius": 25.46360268556661
+        },
+        {
+            "id": "shape3",
+            "position": {
+                "x": 1625.0499999999997,
+                "y": -37.68796296296296
+            },
+            "halfSize": {
+                "x": "11",
+                "y": "79"
+            },
+            "rotation": 0,
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "3",
+            "emissionRate": "5.3",
+            "radius": 25.46360268556661
+        },
+        {
+            "id": "shape4",
+            "position": {
+                "x": 1623.7166666666665,
+                "y": 111.84814814814816
+            },
+            "halfSize": {
+                "x": "11",
+                "y": "45"
+            },
+            "rotation": 0,
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "3",
+            "emissionRate": "5.3",
+            "radius": 25.46360268556661
+        },
+        {
+            "id": "shape5",
+            "position": {
+                "x": 1117.3833333333332,
+                "y": 869.3861111111112
+            },
+            "halfSize": {
+                "x": "563",
+                "y": "664"
+            },
+            "rotation": 0,
+            "shape": "0",
+            "function": "1",
+            "emitMaterial": "3",
+            "emissionRate": "5.3",
+            "radius": 25.46360268556661
+        }
+    ],
+    "settings": [
+        {
+            "name": "particlesPerCellAxis",
+            "type": "range",
+            "value": "3"
+        },
+        {
+            "name": "simRate",
+            "type": "combo",
+            "value": "480"
+        },
+        {
+            "name": "iterationCount",
+            "type": "range",
+            "value": "10"
+        },
+        {
+            "name": "plasticity",
+            "type": "range",
+            "value": "0.93"
+        },
+        {
+            "name": "renderMode",
+            "type": "combo",
+            "value": "0"
+        }
+    ]
+}
