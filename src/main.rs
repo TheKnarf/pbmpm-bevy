@@ -7,6 +7,7 @@ mod time_regulation;
 mod types;
 mod ui;
 
+use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::feathers::FeathersPlugins;
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
@@ -35,6 +36,16 @@ fn main() {
                 }),
         )
         .add_plugins(FeathersPlugins)
+        .add_plugins(FpsOverlayPlugin {
+            config: FpsOverlayConfig {
+                text_config: TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                text_color: Color::srgba(0.0, 1.0, 0.0, 0.7),
+                ..default()
+            },
+        })
         .insert_resource(bevy::feathers::theme::UiTheme(
             bevy::feathers::dark_theme::create_dark_theme(),
         ))
