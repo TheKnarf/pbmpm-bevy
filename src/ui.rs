@@ -59,6 +59,16 @@ pub struct ShapeFunctionButton;
 pub struct ShapeMaterialButton;
 #[derive(Component)]
 pub struct UiPanel;
+#[derive(Component)]
+pub struct ShapeSizeXSlider;
+#[derive(Component)]
+pub struct ShapeSizeYSlider;
+#[derive(Component)]
+pub struct ShapeRotationSlider;
+#[derive(Component)]
+pub struct ShapeEmitRateSlider;
+#[derive(Component)]
+pub struct SaveSceneButton;
 
 pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<SceneManifest>) {
     let scene_name = manifest
@@ -287,6 +297,32 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                 ],
             ),
 
+            // Shape size/rotation/emission sliders
+            (mk_slider("Size X", ShapeSizeXSlider, 1.0, 500.0, 50.0, 1.0, 0)),
+            (mk_slider("Size Y", ShapeSizeYSlider, 1.0, 500.0, 50.0, 1.0, 0)),
+            (mk_slider("Rotation", ShapeRotationSlider, -180.0, 180.0, 0.0, 1.0, 0)),
+            (mk_slider("Emit Rate", ShapeEmitRateSlider, 0.0, 20.0, 2.5, 0.1, 1)),
+
+            // Save scene button
+            (
+                button(
+                    ButtonProps::default(),
+                    SaveSceneButton,
+                    Spawn((Text::new("Save Scene (JSON)"), ThemedText)),
+                ),
+                observe(
+                    |_: On<Activate>,
+                     state: Res<SimState>,
+                     params: Res<SimParams>,
+                     windows: Query<&Window>| {
+                        let Ok(window) = windows.single() else {
+                            return;
+                        };
+                        save_scene_to_file(&state, &params, window.width(), window.height());
+                    },
+                ),
+            ),
+
             // Stats
             (
                 Text::new("Grid: --"),
@@ -510,6 +546,149 @@ pub fn toggle_ui(keys: Res<ButtonInput<KeyCode>>, mut q_panel: Query<&mut Node, 
                 node.display = Display::None;
             }
         }
+    }
+}
+
+/// Sync shape property sliders bidirectionally with the selected shape.
+#[allow(clippy::too_many_arguments)]
+pub fn sync_shape_sliders(
+    mut commands: Commands,
+    mut sim_state: ResMut<SimState>,
+    interaction: Res<ShapeInteraction>,
+    q_size_x: Query<(Entity, &SliderValue), With<ShapeSizeXSlider>>,
+    q_size_y: Query<(Entity, &SliderValue), With<ShapeSizeYSlider>>,
+    q_rotation: Query<(Entity, &SliderValue), With<ShapeRotationSlider>>,
+    q_emit_rate: Query<(Entity, &SliderValue), With<ShapeEmitRateSlider>>,
+    mut prev_selection: Local<Option<usize>>,
+) {
+    let Some(idx) = interaction.selected_index else {
+        *prev_selection = None;
+        return;
+    };
+    let selection_changed = *prev_selection != Some(idx);
+    *prev_selection = Some(idx);
+
+    if selection_changed {
+        // Push shape values to sliders when selection changes
+        if let Some(shape) = sim_state.shapes.get(idx) {
+            let is_circle = shape.shape.as_f32() as u32 == 1;
+            if let Ok((e, _)) = q_size_x.single() {
+                let val = if is_circle {
+                    shape.radius
+                } else {
+                    shape.half_size.x as f32
+                };
+                commands.entity(e).insert(SliderValue(val));
+            }
+            if let Ok((e, _)) = q_size_y.single() {
+                let val = if is_circle {
+                    shape.radius
+                } else {
+                    shape.half_size.y as f32
+                };
+                commands.entity(e).insert(SliderValue(val));
+            }
+            if let Ok((e, _)) = q_rotation.single() {
+                commands.entity(e).insert(SliderValue(shape.rotation));
+            }
+            if let Ok((e, _)) = q_emit_rate.single() {
+                commands
+                    .entity(e)
+                    .insert(SliderValue(shape.emission_rate.as_f32()));
+            }
+        }
+    } else {
+        // Pull slider values into shape
+        if let Some(shape) = sim_state.shapes.get_mut(idx) {
+            let is_circle = shape.shape.as_f32() as u32 == 1;
+            if let Ok((_, v)) = q_size_x.single() {
+                if is_circle {
+                    shape.radius = v.0;
+                } else {
+                    shape.half_size.x = v.0 as f64;
+                }
+            }
+            if let Ok((_, v)) = q_size_y.single() {
+                if is_circle {
+                    shape.radius = v.0;
+                } else {
+                    shape.half_size.y = v.0 as f64;
+                }
+            }
+            if let Ok((_, v)) = q_rotation.single() {
+                shape.rotation = v.0;
+            }
+            if let Ok((_, v)) = q_emit_rate.single() {
+                shape.emission_rate = StringOrNumber::Float(v.0 as f64);
+            }
+        }
+    }
+}
+
+/// Save current scene to a JSON file.
+fn save_scene_to_file(state: &SimState, params: &SimParams, width: f32, height: f32) {
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct SavedScene {
+        version: u32,
+        resolution: [f64; 2],
+        settings: Vec<SavedSetting>,
+        shapes: Vec<SimShape>,
+    }
+
+    #[derive(Serialize)]
+    struct SavedSetting {
+        name: String,
+        value: serde_json::Value,
+        #[serde(rename = "type")]
+        setting_type: String,
+    }
+
+    let mut settings = Vec::new();
+    let defaults = SimParams::default();
+
+    macro_rules! save_if_changed {
+        ($name:expr, $field:ident, $kind:expr) => {
+            if params.$field != defaults.$field {
+                settings.push(SavedSetting {
+                    name: $name.to_string(),
+                    value: serde_json::json!(params.$field),
+                    setting_type: $kind.to_string(),
+                });
+            }
+        };
+    }
+
+    save_if_changed!("iterationCount", iteration_count, "range");
+    save_if_changed!("simResDivisor", sim_res_divisor, "combo");
+    save_if_changed!("particlesPerCellAxis", particles_per_cell_axis, "range");
+    save_if_changed!("gravityStrength", gravity_strength, "range");
+    save_if_changed!("liquidViscosity", liquid_viscosity, "range");
+    save_if_changed!("elasticityRatio", elasticity_ratio, "range");
+    save_if_changed!("liquidRelaxation", liquid_relaxation, "range");
+    save_if_changed!("elasticRelaxation", elastic_relaxation, "range");
+    save_if_changed!("frictionAngle", friction_angle, "range");
+    save_if_changed!("plasticity", plasticity, "range");
+    save_if_changed!("borderFriction", border_friction, "range");
+
+    let scene = SavedScene {
+        version: 2,
+        resolution: [width as f64, height as f64],
+        settings,
+        shapes: state.shapes.clone(),
+    };
+
+    let path = "saved_scene.json";
+    match serde_json::to_string_pretty(&scene) {
+        Ok(json) => {
+            if std::fs::write(path, &json).is_ok() {
+                info!("Scene saved to {path}");
+            } else {
+                warn!("Failed to write scene file");
+            }
+        }
+        Err(e) => warn!("Failed to serialize scene: {e}"),
     }
 }
 

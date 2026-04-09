@@ -196,7 +196,7 @@ pub struct RenderConstantsGpu {
 
 // --- Simulation Parameters Resource ---
 
-#[derive(Resource, Debug, Clone)]
+#[derive(Resource, Debug, Clone, PartialEq)]
 pub struct SimParams {
     pub sim_res_divisor: u32,
     pub particles_per_cell_axis: u32,

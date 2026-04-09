@@ -55,6 +55,7 @@ fn main() {
                 shape_editor::shape_keyboard,
                 shape_editor::draw_shape_overlay,
                 ui::sync_params,
+                ui::sync_shape_sliders,
                 ui::update_stats,
                 ui::update_shape_info,
                 ui::toggle_ui,
