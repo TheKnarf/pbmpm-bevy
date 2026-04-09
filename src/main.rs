@@ -33,6 +33,9 @@ fn main() {
                 }),
         )
         .add_plugins(FeathersPlugins)
+        .insert_resource(bevy::feathers::theme::UiTheme(
+            bevy::feathers::dark_theme::create_dark_theme(),
+        ))
         .add_plugins(PbmpmPlugin)
         .init_resource::<SimParams>()
         .init_resource::<SimState>()
