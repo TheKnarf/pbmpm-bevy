@@ -7,8 +7,8 @@ mod types;
 mod ui;
 
 use bevy::prelude::*;
+use bevy::feathers::FeathersPlugins;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use bevy_egui::{EguiPrimaryContextPass, EguiPlugin};
 
 use scene::*;
 use simulation::PbmpmPlugin;
@@ -32,16 +32,20 @@ fn main() {
                     ..default()
                 }),
         )
-        .add_plugins(EguiPlugin::default())
+        .add_plugins(FeathersPlugins)
         .add_plugins(PbmpmPlugin)
         .init_resource::<SimParams>()
         .init_resource::<SimState>()
         .init_resource::<InputState>()
         .init_resource::<TimeRegulation>()
         .init_resource::<SceneManifest>()
-        .add_systems(Startup, setup)
-        .add_systems(Update, (input_system, keyboard_system))
-        .add_systems(EguiPrimaryContextPass, ui::ui_system)
+        .add_systems(Startup, (setup, ui::setup_ui).chain())
+        .add_systems(Update, (
+            input_system,
+            keyboard_system,
+            ui::sync_params,
+            ui::update_stats,
+        ))
         .run();
 }
 
@@ -52,9 +56,6 @@ fn setup(
     mut manifest: ResMut<SceneManifest>,
     windows: Query<&Window>,
 ) {
-    // Our custom node renders to ViewTarget before the camera pipeline runs.
-    // Camera set to None so it doesn't clear our content.
-    // MSAA off to avoid intermediate texture complications.
     commands.spawn((
         Camera2d,
         Camera {
@@ -64,32 +65,19 @@ fn setup(
         Msaa::Off,
     ));
 
-    // Load scene manifest
     *manifest = SceneManifest(load_manifest());
 
-    // Load first scene
     if let Some(entry) = manifest.0.first() {
         if let Some(scene_file) = load_scene(&entry.scene) {
             let Ok(window) = windows.single() else {
-                info!("Window not ready at startup, using default resolution");
                 apply_scene(&scene_file, &mut sim_state, &mut params, 1280.0, 720.0);
-                info!("Loaded scene with {} shapes", sim_state.shapes.len());
                 return;
             };
-            apply_scene(
-                &scene_file,
-                &mut sim_state,
-                &mut params,
-                window.width(),
-                window.height(),
-            );
-            info!("Loaded scene with {} shapes, grid {}x{}", sim_state.shapes.len(), sim_state.grid_size[0], sim_state.grid_size[1]);
-        } else {
-            warn!("Failed to load scene file");
+            apply_scene(&scene_file, &mut sim_state, &mut params, window.width(), window.height());
+            info!("Loaded scene: {} ({} shapes)", entry.name, sim_state.shapes.len());
         }
     }
-
-    info!("PB-MPM Bevy initialized with {} scenes", manifest.0.len());
+    info!("PB-MPM initialized with {} scenes", manifest.0.len());
 }
 
 fn input_system(
@@ -98,17 +86,11 @@ fn input_system(
     mut input: ResMut<InputState>,
 ) {
     let Ok(window) = windows.single() else { return };
-
     input.mouse_prev_position = input.mouse_position;
-
     if let Some(pos) = window.cursor_position() {
         input.mouse_position = pos;
     }
-
     input.mouse_down = mouse_buttons.pressed(MouseButton::Left);
-
-    // Scroll to adjust mouse radius
-    // (In Bevy, mouse wheel is handled via events, simplified here)
 }
 
 fn keyboard_system(
@@ -118,36 +100,21 @@ fn keyboard_system(
     manifest: Res<SceneManifest>,
     mut params: ResMut<SimParams>,
     windows: Query<&Window>,
+    mut q_name: Query<&mut Text, With<ui::SceneNameLabel>>,
 ) {
     if keys.just_pressed(KeyCode::F5) {
         sim_state.do_reset = true;
     }
-
     if keys.just_pressed(KeyCode::Space) {
         sim_state.is_paused = !sim_state.is_paused;
     }
-
     if keys.just_pressed(KeyCode::F12) {
         commands.spawn(Screenshot::primary_window())
             .observe(save_to_disk("/tmp/pbmpm_screenshot.png"));
         info!("Screenshot requested");
     }
-
     if keys.just_pressed(KeyCode::Tab) && !manifest.0.is_empty() {
         sim_state.scene_index = (sim_state.scene_index + 1) % manifest.0.len();
-        if let Some(entry) = manifest.0.get(sim_state.scene_index) {
-            if let Some(scene_file) = load_scene(&entry.scene) {
-                let Ok(window) = windows.single() else { return };
-                *params = SimParams::default();
-                apply_scene(
-                    &scene_file,
-                    &mut sim_state,
-                    &mut params,
-                    window.width(),
-                    window.height(),
-                );
-            }
-        }
+        ui::do_load_scene(&mut sim_state, &mut params, &manifest, &windows, &mut q_name);
     }
 }
-
