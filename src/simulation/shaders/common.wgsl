@@ -148,8 +148,9 @@ fn svd(m: mat2x2f) -> SVDResult {
     let sx = Q + R;
     let sy = Q - R;
 
-    let a1 = atan2(G, F);
-    let a2 = atan2(H, E);
+    // Guard atan2(0,0) which is undefined on Metal (macOS)
+    let a1 = select(atan2(G, F), 0.0, F == 0.0 && G == 0.0);
+    let a2 = select(atan2(H, E), 0.0, E == 0.0 && H == 0.0);
 
     let theta = (a2 - a1) * 0.5;
     let phi = (a2 + a1) * 0.5;

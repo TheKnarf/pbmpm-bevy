@@ -102,6 +102,7 @@ fn csMain(@builtin(local_invocation_index) indexInGroup: u32, @builtin(workgroup
         let myParticleIndex = g_bukkitParticleData[threadData.rangeStart + indexInGroup];
         var particle = g_particles[myParticleIndex];
 
+      if (particle.enabled != 0.0) {
         var p = particle.position;
         let weightInfo = quadraticWeightInit(p);
 
@@ -292,6 +293,7 @@ fn csMain(@builtin(local_invocation_index) indexInGroup: u32, @builtin(workgroup
                 }
             }
         }
+      } // if (particle.enabled != 0.0)
     }
 
     workgroupBarrier();
