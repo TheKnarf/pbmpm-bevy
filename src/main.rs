@@ -120,8 +120,8 @@ fn input_system(
     // Mouse down only when not dragging a shape
     input.mouse_down = mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none();
 
-    // Scroll wheel adjusts mouse interaction radius when mouse is down
-    if input.mouse_down && scroll.delta.y != 0.0 {
+    // Scroll wheel adjusts mouse interaction radius
+    if scroll.delta.y != 0.0 {
         params.mouse_radius *= 1.1_f32.powf(scroll.delta.y);
         params.mouse_radius = params.mouse_radius.clamp(10.0, 1000.0);
     }
