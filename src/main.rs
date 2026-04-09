@@ -7,9 +7,8 @@ mod types;
 mod ui;
 
 use bevy::prelude::*;
-use bevy::render::camera::ClearColorConfig;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use bevy_egui::{EguiContextPass, EguiPlugin};
+use bevy_egui::{EguiPrimaryContextPass, EguiPlugin};
 
 use scene::*;
 use simulation::PbmpmPlugin;
@@ -23,7 +22,7 @@ fn main() {
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "PB-MPM (Bevy)".into(),
-                        resolution: (1280., 720.).into(),
+                        resolution: bevy::window::WindowResolution::new(1280, 720),
                         ..default()
                     }),
                     ..default()
@@ -33,7 +32,7 @@ fn main() {
                     ..default()
                 }),
         )
-        .add_plugins(EguiPlugin { enable_multipass_for_primary_context: true })
+        .add_plugins(EguiPlugin::default())
         .add_plugins(PbmpmPlugin)
         .init_resource::<SimParams>()
         .init_resource::<SimState>()
@@ -42,7 +41,7 @@ fn main() {
         .init_resource::<SceneManifest>()
         .add_systems(Startup, setup)
         .add_systems(Update, (input_system, keyboard_system))
-        .add_systems(EguiContextPass, ui::ui_system)
+        .add_systems(EguiPrimaryContextPass, ui::ui_system)
         .run();
 }
 
@@ -55,12 +54,11 @@ fn setup(
 ) {
     // Our custom node renders to ViewTarget before the camera pipeline runs.
     // Camera set to None so it doesn't clear our content.
-    // Disable HDR and MSAA to avoid intermediate texture complications.
+    // MSAA off to avoid intermediate texture complications.
     commands.spawn((
         Camera2d,
         Camera {
-            clear_color: ClearColorConfig::None,
-            hdr: false,
+            clear_color: bevy::camera::ClearColorConfig::None,
             ..default()
         },
         Msaa::Off,
