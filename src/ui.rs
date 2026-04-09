@@ -9,6 +9,7 @@ use bevy::ui_widgets::{
 };
 
 use crate::scene::*;
+use crate::shape_editor::ShapeInteraction;
 use crate::types::*;
 
 // --- Marker components ---
@@ -48,6 +49,14 @@ pub struct PixelsPerCellButton;
 pub struct RenderModeButton;
 #[derive(Component)]
 pub struct MouseFnButton;
+#[derive(Component)]
+pub struct ShapeInfoLabel;
+#[derive(Component)]
+pub struct ShapeTypeButton;
+#[derive(Component)]
+pub struct ShapeFunctionButton;
+#[derive(Component)]
+pub struct ShapeMaterialButton;
 
 pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<SceneManifest>) {
     let scene_name = manifest
@@ -215,6 +224,66 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
             (mk_slider("Border Fric", BorderFrictionSlider, 0.0, 1.0, params.border_friction, 0.01, 2)),
             (mk_slider("FP Mult Exp", FpMultSlider, 3.0, 10.0, params.fixed_point_multiplier_exponent as f32, 1.0, 0)),
 
+            // Selected shape info
+            (
+                Text::new("No shape selected"),
+                ShapeInfoLabel,
+                ThemedText,
+                TextFont { font_size: 11.0, ..default() },
+                Node { margin: UiRect::top(Val::Px(8.0)), ..default() },
+            ),
+            (
+                Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(4.0), align_items: AlignItems::Center, ..default() },
+                children![
+                    (Text::new("Type"), ThemedText, TextFont { font_size: 11.0, ..default() }, Node { width: Val::Px(50.0), ..default() }),
+                    (
+                        button(ButtonProps::default(), ShapeTypeButton, Spawn((Text::new("--"), ThemedText))),
+                        observe(|ev: On<Activate>, mut state: ResMut<SimState>, interaction: Res<ShapeInteraction>,
+                                q: Query<&Children, With<ShapeTypeButton>>, mut qt: Query<&mut Text>| {
+                            if let Some(idx) = interaction.selected_index {
+                                if let Some(shape) = state.shapes.get_mut(idx) {
+                                    let cur = shape.shape.as_f32() as u32;
+                                    let next = if cur == 0 { 1 } else { 0 };
+                                    shape.shape = StringOrNumber::Int(next as i64);
+                                    let label = if next == 0 { "Box" } else { "Circle" };
+                                    update_btn_text(ev.event_target(), &q, &mut qt, label);
+                                }
+                            }
+                        }),
+                    ),
+                    (
+                        button(ButtonProps::default(), ShapeFunctionButton, Spawn((Text::new("--"), ThemedText))),
+                        observe(|ev: On<Activate>, mut state: ResMut<SimState>, interaction: Res<ShapeInteraction>,
+                                q: Query<&Children, With<ShapeFunctionButton>>, mut qt: Query<&mut Text>| {
+                            if let Some(idx) = interaction.selected_index {
+                                if let Some(shape) = state.shapes.get_mut(idx) {
+                                    let cur = shape.function.as_f32() as u32;
+                                    let next = (cur + 1) % 4;
+                                    shape.function = StringOrNumber::Int(next as i64);
+                                    let label = match next { 0 => "Emit", 1 => "Collider", 2 => "Drain", _ => "InitEmit" };
+                                    update_btn_text(ev.event_target(), &q, &mut qt, label);
+                                }
+                            }
+                        }),
+                    ),
+                    (
+                        button(ButtonProps::default(), ShapeMaterialButton, Spawn((Text::new("--"), ThemedText))),
+                        observe(|ev: On<Activate>, mut state: ResMut<SimState>, interaction: Res<ShapeInteraction>,
+                                q: Query<&Children, With<ShapeMaterialButton>>, mut qt: Query<&mut Text>| {
+                            if let Some(idx) = interaction.selected_index {
+                                if let Some(shape) = state.shapes.get_mut(idx) {
+                                    let cur = shape.emit_material.as_f32() as u32;
+                                    let next = (cur + 1) % 4;
+                                    shape.emit_material = StringOrNumber::Int(next as i64);
+                                    let label = match next { 0 => "Liquid", 1 => "Elastic", 2 => "Sand", _ => "Visco" };
+                                    update_btn_text(ev.event_target(), &q, &mut qt, label);
+                                }
+                            }
+                        }),
+                    ),
+                ],
+            ),
+
             // Stats
             (
                 Text::new("Grid: --"),
@@ -359,6 +428,72 @@ pub fn sync_params(
     }
     if let Ok(checked) = q_grid_vol.single() {
         params.use_grid_volume_for_liquid = checked;
+    }
+}
+
+/// Update the shape info label and button text based on current selection
+pub fn update_shape_info(
+    sim_state: Res<SimState>,
+    interaction: Res<ShapeInteraction>,
+    mut q_info: Query<&mut Text, With<ShapeInfoLabel>>,
+    q_type_btn: Query<&Children, With<ShapeTypeButton>>,
+    q_func_btn: Query<&Children, With<ShapeFunctionButton>>,
+    q_mat_btn: Query<&Children, With<ShapeMaterialButton>>,
+    mut q_text: Query<&mut Text, (Without<ShapeInfoLabel>, Without<GridStatsLabel>)>,
+) {
+    let info_text = if let Some(idx) = interaction.selected_index {
+        if let Some(shape) = sim_state.shapes.get(idx) {
+            let shape_type = if shape.shape.as_f32() as u32 == 0 {
+                "Box"
+            } else {
+                "Circle"
+            };
+            let func = match shape.function.as_f32() as u32 {
+                0 => "Emit",
+                1 => "Collider",
+                2 => "Drain",
+                _ => "InitEmit",
+            };
+            let mat = match shape.emit_material.as_f32() as u32 {
+                0 => "Liquid",
+                1 => "Elastic",
+                2 => "Sand",
+                _ => "Visco",
+            };
+
+            // Update button labels
+            if let Ok(children) = q_type_btn.single() {
+                for child in children.iter() {
+                    if let Ok(mut t) = q_text.get_mut(child) {
+                        t.0 = shape_type.to_string();
+                    }
+                }
+            }
+            if let Ok(children) = q_func_btn.single() {
+                for child in children.iter() {
+                    if let Ok(mut t) = q_text.get_mut(child) {
+                        t.0 = func.to_string();
+                    }
+                }
+            }
+            if let Ok(children) = q_mat_btn.single() {
+                for child in children.iter() {
+                    if let Ok(mut t) = q_text.get_mut(child) {
+                        t.0 = mat.to_string();
+                    }
+                }
+            }
+
+            format!("Shape {} [{}] {} {}", shape.id, shape_type, func, mat)
+        } else {
+            "No shape selected".to_string()
+        }
+    } else {
+        "Click a shape to select (Cmd+N new, Del remove)".to_string()
+    };
+
+    if let Ok(mut text) = q_info.single_mut() {
+        text.0 = info_text;
     }
 }
 

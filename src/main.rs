@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod scene;
+mod shape_editor;
 mod simulation;
 mod time_regulation;
 mod types;
@@ -42,14 +43,19 @@ fn main() {
         .init_resource::<InputState>()
         .init_resource::<TimeRegulation>()
         .init_resource::<SceneManifest>()
+        .init_resource::<shape_editor::ShapeInteraction>()
         .add_systems(Startup, (setup, ui::setup_ui).chain())
         .add_systems(
             Update,
             (
                 input_system,
                 keyboard_system,
+                shape_editor::shape_mouse_interaction,
+                shape_editor::shape_keyboard,
+                shape_editor::draw_shape_overlay,
                 ui::sync_params,
                 ui::update_stats,
+                ui::update_shape_info,
             ),
         )
         .run();
