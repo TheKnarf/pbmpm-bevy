@@ -49,17 +49,26 @@ impl GpuSimState {
             mapped_at_creation: false,
         }));
 
-        self.particle_count_buffer =
-            Some(create_4u32_buffer(device, "particle_count", &[0, 0, 0, 0],
-                BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC));
+        self.particle_count_buffer = Some(create_4u32_buffer(
+            device,
+            "particle_count",
+            &[0, 0, 0, 0],
+            BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+        ));
 
-        self.particle_sim_dispatch_buffer =
-            Some(create_4u32_buffer(device, "sim_dispatch", &[0, 1, 1, 0],
-                BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST));
+        self.particle_sim_dispatch_buffer = Some(create_4u32_buffer(
+            device,
+            "sim_dispatch",
+            &[0, 1, 1, 0],
+            BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+        ));
 
-        self.particle_render_dispatch_buffer =
-            Some(create_4u32_buffer(device, "render_dispatch", &[6, 0, 0, 0],
-                BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST));
+        self.particle_render_dispatch_buffer = Some(create_4u32_buffer(
+            device,
+            "render_dispatch",
+            &[6, 0, 0, 0],
+            BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+        ));
 
         self.particle_free_indices_buffer = Some(device.create_buffer(&BufferDescriptor {
             label: Some("free_indices"),
@@ -108,17 +117,26 @@ impl GpuSimState {
             mapped_at_creation: false,
         }));
 
-        self.bukkit_dispatch =
-            Some(create_4u32_buffer(device, "bukkit_dispatch", &[0, 1, 1, 0],
-                BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST));
+        self.bukkit_dispatch = Some(create_4u32_buffer(
+            device,
+            "bukkit_dispatch",
+            &[0, 1, 1, 0],
+            BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+        ));
 
-        self.bukkit_blank_dispatch =
-            Some(create_4u32_buffer(device, "bukkit_blank_dispatch", &[0, 1, 1, 0],
-                BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST));
+        self.bukkit_blank_dispatch = Some(create_4u32_buffer(
+            device,
+            "bukkit_blank_dispatch",
+            &[0, 1, 1, 0],
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+        ));
 
-        self.bukkit_particle_allocator =
-            Some(create_4u32_buffer(device, "bukkit_allocator", &[0, 0, 0, 0],
-                BufferUsages::STORAGE | BufferUsages::COPY_DST));
+        self.bukkit_particle_allocator = Some(create_4u32_buffer(
+            device,
+            "bukkit_allocator",
+            &[0, 0, 0, 0],
+            BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        ));
 
         self.bukkit_index_start = Some(device.create_buffer(&BufferDescriptor {
             label: Some("bukkit_index_start"),
@@ -224,8 +242,13 @@ impl PbmpmPipelines {
         });
 
         Self {
-            g2p2g, particle_emit, bukkit_count, bukkit_allocate,
-            bukkit_insert, set_indirect_args, particle_render,
+            g2p2g,
+            particle_emit,
+            bukkit_count,
+            bukkit_allocate,
+            bukkit_insert,
+            set_indirect_args,
+            particle_render,
         }
     }
 }

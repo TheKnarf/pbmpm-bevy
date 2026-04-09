@@ -6,8 +6,8 @@ mod time_regulation;
 mod types;
 mod ui;
 
-use bevy::prelude::*;
 use bevy::feathers::FeathersPlugins;
+use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
 use scene::*;
@@ -43,12 +43,15 @@ fn main() {
         .init_resource::<TimeRegulation>()
         .init_resource::<SceneManifest>()
         .add_systems(Startup, (setup, ui::setup_ui).chain())
-        .add_systems(Update, (
-            input_system,
-            keyboard_system,
-            ui::sync_params,
-            ui::update_stats,
-        ))
+        .add_systems(
+            Update,
+            (
+                input_system,
+                keyboard_system,
+                ui::sync_params,
+                ui::update_stats,
+            ),
+        )
         .run();
 }
 
@@ -76,8 +79,18 @@ fn setup(
                 apply_scene(&scene_file, &mut sim_state, &mut params, 1280.0, 720.0);
                 return;
             };
-            apply_scene(&scene_file, &mut sim_state, &mut params, window.width(), window.height());
-            info!("Loaded scene: {} ({} shapes)", entry.name, sim_state.shapes.len());
+            apply_scene(
+                &scene_file,
+                &mut sim_state,
+                &mut params,
+                window.width(),
+                window.height(),
+            );
+            info!(
+                "Loaded scene: {} ({} shapes)",
+                entry.name,
+                sim_state.shapes.len()
+            );
         }
     }
     info!("PB-MPM initialized with {} scenes", manifest.0.len());
@@ -112,12 +125,19 @@ fn keyboard_system(
         sim_state.is_paused = !sim_state.is_paused;
     }
     if keys.just_pressed(KeyCode::F12) {
-        commands.spawn(Screenshot::primary_window())
+        commands
+            .spawn(Screenshot::primary_window())
             .observe(save_to_disk("/tmp/pbmpm_screenshot.png"));
         info!("Screenshot requested");
     }
     if keys.just_pressed(KeyCode::Tab) && !manifest.0.is_empty() {
         sim_state.scene_index = (sim_state.scene_index + 1) % manifest.0.len();
-        ui::do_load_scene(&mut sim_state, &mut params, &manifest, &windows, &mut q_name);
+        ui::do_load_scene(
+            &mut sim_state,
+            &mut params,
+            &manifest,
+            &windows,
+            &mut q_name,
+        );
     }
 }

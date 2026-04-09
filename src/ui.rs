@@ -1,38 +1,60 @@
-use bevy::prelude::*;
 use bevy::feathers::controls::*;
 use bevy::feathers::theme::*;
 use bevy::feathers::tokens;
+use bevy::prelude::*;
 use bevy::ui::Checked;
 use bevy::ui_widgets::{
-    observe, slider_self_update, checkbox_self_update,
-    Activate, SliderPrecision, SliderStep, SliderValue, ValueChange,
+    checkbox_self_update, observe, slider_self_update, Activate, SliderPrecision, SliderStep,
+    SliderValue,
 };
 
 use crate::scene::*;
 use crate::types::*;
 
 // --- Marker components ---
-#[derive(Component)] pub struct GravitySlider;
-#[derive(Component)] pub struct IterationSlider;
-#[derive(Component)] pub struct ElasticitySlider;
-#[derive(Component)] pub struct LiquidRelaxSlider;
-#[derive(Component)] pub struct ElasticRelaxSlider;
-#[derive(Component)] pub struct FrictionAngleSlider;
-#[derive(Component)] pub struct PlasticitySlider;
-#[derive(Component)] pub struct BorderFrictionSlider;
-#[derive(Component)] pub struct ViscositySlider;
-#[derive(Component)] pub struct ParticlesPerCellSlider;
-#[derive(Component)] pub struct FpMultSlider;
-#[derive(Component)] pub struct GridVolumeCheckbox;
-#[derive(Component)] pub struct SceneNameLabel;
-#[derive(Component)] pub struct GridStatsLabel;
-#[derive(Component)] pub struct SimRateButton;
-#[derive(Component)] pub struct PixelsPerCellButton;
-#[derive(Component)] pub struct RenderModeButton;
-#[derive(Component)] pub struct MouseFnButton;
+#[derive(Component)]
+pub struct GravitySlider;
+#[derive(Component)]
+pub struct IterationSlider;
+#[derive(Component)]
+pub struct ElasticitySlider;
+#[derive(Component)]
+pub struct LiquidRelaxSlider;
+#[derive(Component)]
+pub struct ElasticRelaxSlider;
+#[derive(Component)]
+pub struct FrictionAngleSlider;
+#[derive(Component)]
+pub struct PlasticitySlider;
+#[derive(Component)]
+pub struct BorderFrictionSlider;
+#[derive(Component)]
+pub struct ViscositySlider;
+#[derive(Component)]
+pub struct ParticlesPerCellSlider;
+#[derive(Component)]
+pub struct FpMultSlider;
+#[derive(Component)]
+pub struct GridVolumeCheckbox;
+#[derive(Component)]
+pub struct SceneNameLabel;
+#[derive(Component)]
+pub struct GridStatsLabel;
+#[derive(Component)]
+pub struct SimRateButton;
+#[derive(Component)]
+pub struct PixelsPerCellButton;
+#[derive(Component)]
+pub struct RenderModeButton;
+#[derive(Component)]
+pub struct MouseFnButton;
 
 pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<SceneManifest>) {
-    let scene_name = manifest.0.first().map(|e| e.name.as_str()).unwrap_or("None");
+    let scene_name = manifest
+        .0
+        .first()
+        .map(|e| e.name.as_str())
+        .unwrap_or("None");
 
     commands.spawn((
         Node {
@@ -173,7 +195,7 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
             // Checkbox
             (
                 checkbox(
-                    if params.use_grid_volume_for_liquid { Checked } else { Checked }, // always start checked (default is true)
+                    Checked, // default is true
                     Spawn((Text::new("Grid Volume for Liquid"), ThemedText)),
                 ),
                 GridVolumeCheckbox,
@@ -225,8 +247,14 @@ fn mk_slider<M: Component>(
             (
                 Text::new(label),
                 ThemedText,
-                TextFont { font_size: 11.0, ..default() },
-                Node { width: Val::Px(85.0), ..default() },
+                TextFont {
+                    font_size: 11.0,
+                    ..default()
+                },
+                Node {
+                    width: Val::Px(85.0),
+                    ..default()
+                },
             ),
             (
                 slider(
@@ -265,7 +293,13 @@ pub fn do_load_scene(
         if let Some(scene_file) = load_scene(&entry.scene) {
             let Ok(window) = windows.single() else { return };
             *params = SimParams::default();
-            apply_scene(&scene_file, sim_state, params, window.width(), window.height());
+            apply_scene(
+                &scene_file,
+                sim_state,
+                params,
+                window.width(),
+                window.height(),
+            );
         }
         if let Ok(mut text) = q_name.single_mut() {
             text.0 = entry.name.clone();
@@ -274,6 +308,7 @@ pub fn do_load_scene(
 }
 
 /// Sync slider values back to SimParams every frame
+#[allow(clippy::too_many_arguments)]
 pub fn sync_params(
     q_gravity: Query<&SliderValue, With<GravitySlider>>,
     q_iterations: Query<&SliderValue, With<IterationSlider>>,
@@ -289,26 +324,52 @@ pub fn sync_params(
     q_grid_vol: Query<Has<Checked>, With<GridVolumeCheckbox>>,
     mut params: ResMut<SimParams>,
 ) {
-    if let Ok(v) = q_gravity.single() { params.gravity_strength = v.0; }
-    if let Ok(v) = q_iterations.single() { params.iteration_count = v.0 as u32; }
-    if let Ok(v) = q_elasticity.single() { params.elasticity_ratio = v.0; }
-    if let Ok(v) = q_liq_relax.single() { params.liquid_relaxation = v.0; }
-    if let Ok(v) = q_elas_relax.single() { params.elastic_relaxation = v.0; }
-    if let Ok(v) = q_friction.single() { params.friction_angle = v.0; }
-    if let Ok(v) = q_plasticity.single() { params.plasticity = v.0; }
-    if let Ok(v) = q_border_fric.single() { params.border_friction = v.0; }
-    if let Ok(v) = q_viscosity.single() { params.liquid_viscosity = v.0; }
-    if let Ok(v) = q_ppc.single() { params.particles_per_cell_axis = v.0 as u32; }
-    if let Ok(v) = q_fp.single() { params.fixed_point_multiplier_exponent = v.0 as u32; }
-    if let Ok(checked) = q_grid_vol.single() { params.use_grid_volume_for_liquid = checked; }
+    if let Ok(v) = q_gravity.single() {
+        params.gravity_strength = v.0;
+    }
+    if let Ok(v) = q_iterations.single() {
+        params.iteration_count = v.0 as u32;
+    }
+    if let Ok(v) = q_elasticity.single() {
+        params.elasticity_ratio = v.0;
+    }
+    if let Ok(v) = q_liq_relax.single() {
+        params.liquid_relaxation = v.0;
+    }
+    if let Ok(v) = q_elas_relax.single() {
+        params.elastic_relaxation = v.0;
+    }
+    if let Ok(v) = q_friction.single() {
+        params.friction_angle = v.0;
+    }
+    if let Ok(v) = q_plasticity.single() {
+        params.plasticity = v.0;
+    }
+    if let Ok(v) = q_border_fric.single() {
+        params.border_friction = v.0;
+    }
+    if let Ok(v) = q_viscosity.single() {
+        params.liquid_viscosity = v.0;
+    }
+    if let Ok(v) = q_ppc.single() {
+        params.particles_per_cell_axis = v.0 as u32;
+    }
+    if let Ok(v) = q_fp.single() {
+        params.fixed_point_multiplier_exponent = v.0 as u32;
+    }
+    if let Ok(checked) = q_grid_vol.single() {
+        params.use_grid_volume_for_liquid = checked;
+    }
 }
 
 /// Update stats label
-pub fn update_stats(
-    sim_state: Res<SimState>,
-    mut q_stats: Query<&mut Text, With<GridStatsLabel>>,
-) {
+pub fn update_stats(sim_state: Res<SimState>, mut q_stats: Query<&mut Text, With<GridStatsLabel>>) {
     if let Ok(mut text) = q_stats.single_mut() {
-        text.0 = format!("Grid: {}x{} | Shapes: {}", sim_state.grid_size[0], sim_state.grid_size[1], sim_state.shapes.len());
+        text.0 = format!(
+            "Grid: {}x{} | Shapes: {}",
+            sim_state.grid_size[0],
+            sim_state.grid_size[1],
+            sim_state.shapes.len()
+        );
     }
 }

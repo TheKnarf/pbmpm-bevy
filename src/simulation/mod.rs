@@ -20,10 +20,7 @@ impl Plugin for PbmpmPlugin {
         // Main world: compute extracted data each frame
         app.init_resource::<ExtractedSimDataSource>();
 
-        app.add_systems(
-            PostUpdate,
-            prepare_extracted_data,
-        );
+        app.add_systems(PostUpdate, prepare_extracted_data);
 
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
@@ -31,10 +28,7 @@ impl Plugin for PbmpmPlugin {
 
         render_app.init_resource::<ExtractedSimData>();
 
-        render_app.add_systems(
-            ExtractSchedule,
-            extract_sim_data,
-        );
+        render_app.add_systems(ExtractSchedule, extract_sim_data);
 
         // Add render graph node
         let mut graph = render_app.world_mut().resource_mut::<RenderGraph>();

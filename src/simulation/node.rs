@@ -182,7 +182,10 @@ impl Node for PbmpmNode {
         let (surface_format, view_texture) = {
             let query = this.view_target_query.as_mut();
             match query.and_then(|q| q.iter_manual(world).next()) {
-                Some(vt) => (vt.main_texture_format(), Some(vt.main_texture_view().clone())),
+                Some(vt) => (
+                    vt.main_texture_format(),
+                    Some(vt.main_texture_view().clone()),
+                ),
                 None => return Ok(()),
             }
         };
@@ -213,23 +216,22 @@ impl Node for PbmpmNode {
         let encoder = render_context.command_encoder();
 
         // Clear grid buffers at start of frame
-        for gb in &state.grid_buffers {
-            if let Some(buf) = gb {
-                encoder.clear_buffer(buf, 0, None);
-            }
+        for buf in state.grid_buffers.iter().flatten() {
+            encoder.clear_buffer(buf, 0, None);
         }
 
         // Simulation substeps
-        let substep_count = if data.is_paused { 0 } else { data.substep_count };
+        let substep_count = if data.is_paused {
+            0
+        } else {
+            data.substep_count
+        };
         let mut substep_index = data.substep_index;
-
 
         for _substep in 0..substep_count {
             // Clear grid buffers for this substep
-            for gb in &state.grid_buffers {
-                if let Some(buf) = gb {
-                    encoder.clear_buffer(buf, 0, None);
-                }
+            for buf in state.grid_buffers.iter().flatten() {
+                encoder.clear_buffer(buf, 0, None);
             }
 
             for iteration in 0..data.params.iteration_count {
@@ -240,9 +242,15 @@ impl Node for PbmpmNode {
                     usage: BufferUsages::UNIFORM,
                 });
 
-                let current_grid = state.grid_buffers[this.buffer_idx as usize].as_ref().unwrap();
-                let next_grid = state.grid_buffers[((this.buffer_idx + 1) % 3) as usize].as_ref().unwrap();
-                let next_next_grid = state.grid_buffers[((this.buffer_idx + 2) % 3) as usize].as_ref().unwrap();
+                let current_grid = state.grid_buffers[this.buffer_idx as usize]
+                    .as_ref()
+                    .unwrap();
+                let next_grid = state.grid_buffers[((this.buffer_idx + 1) % 3) as usize]
+                    .as_ref()
+                    .unwrap();
+                let next_next_grid = state.grid_buffers[((this.buffer_idx + 2) % 3) as usize]
+                    .as_ref()
+                    .unwrap();
                 this.buffer_idx = (this.buffer_idx + 1) % 3;
 
                 // G2P2G dispatch
@@ -250,15 +258,54 @@ impl Node for PbmpmNode {
                     "g2p2g",
                     &BindGroupLayout::from(pipelines.g2p2g.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        BindGroupEntry { binding: 1, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 2, resource: current_grid.as_entire_binding() },
-                        BindGroupEntry { binding: 3, resource: next_grid.as_entire_binding() },
-                        BindGroupEntry { binding: 4, resource: next_next_grid.as_entire_binding() },
-                        BindGroupEntry { binding: 5, resource: state.bukkit_thread_data.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 6, resource: state.bukkit_particle_data.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 7, resource: shape_buffer.as_entire_binding() },
-                        BindGroupEntry { binding: 8, resource: state.particle_free_indices_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: sim_uniform.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 2,
+                            resource: current_grid.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 3,
+                            resource: next_grid.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 4,
+                            resource: next_next_grid.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 5,
+                            resource: state
+                                .bukkit_thread_data
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 6,
+                            resource: state
+                                .bukkit_particle_data
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 7,
+                            resource: shape_buffer.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 8,
+                            resource: state
+                                .particle_free_indices_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
                     ],
                 );
 
@@ -282,19 +329,47 @@ impl Node for PbmpmNode {
                     usage: BufferUsages::UNIFORM,
                 });
 
-                let grid = state.grid_buffers[this.buffer_idx as usize].as_ref().unwrap();
+                let grid = state.grid_buffers[this.buffer_idx as usize]
+                    .as_ref()
+                    .unwrap();
 
                 // Particle emit
                 let emit_bg = device.create_bind_group(
                     "particle_emit",
                     &BindGroupLayout::from(pipelines.particle_emit.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 2, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 3, resource: shape_buffer.as_entire_binding() },
-                        BindGroupEntry { binding: 4, resource: state.particle_free_indices_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 5, resource: grid.as_entire_binding() },
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: sim_uniform.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: state
+                                .particle_count_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 2,
+                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 3,
+                            resource: shape_buffer.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 4,
+                            resource: state
+                                .particle_free_indices_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 5,
+                            resource: grid.as_entire_binding(),
+                        },
                     ],
                 );
 
@@ -316,9 +391,30 @@ impl Node for PbmpmNode {
                     "set_indirect_args",
                     &BindGroupLayout::from(pipelines.set_indirect_args.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry { binding: 0, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 1, resource: state.particle_sim_dispatch_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 2, resource: state.particle_render_dispatch_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: state
+                                .particle_count_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: state
+                                .particle_sim_dispatch_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 2,
+                            resource: state
+                                .particle_render_dispatch_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
                     ],
                 );
                 {
@@ -348,8 +444,10 @@ impl Node for PbmpmNode {
                 encoder.clear_buffer(state.bukkit_particle_data.as_ref().unwrap(), 0, None);
                 encoder.clear_buffer(state.bukkit_particle_allocator.as_ref().unwrap(), 0, None);
                 encoder.copy_buffer_to_buffer(
-                    state.bukkit_blank_dispatch.as_ref().unwrap(), 0,
-                    state.bukkit_dispatch.as_ref().unwrap(), 0,
+                    state.bukkit_blank_dispatch.as_ref().unwrap(),
+                    0,
+                    state.bukkit_dispatch.as_ref().unwrap(),
+                    0,
                     state.bukkit_dispatch.as_ref().unwrap().size(),
                 );
 
@@ -358,10 +456,30 @@ impl Node for PbmpmNode {
                     "bukkit_count",
                     &BindGroupLayout::from(pipelines.bukkit_count.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 2, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 3, resource: state.bukkit_count_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: sim_uniform.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: state
+                                .particle_count_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 2,
+                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 3,
+                            resource: state
+                                .bukkit_count_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
                     ],
                 );
                 {
@@ -371,7 +489,10 @@ impl Node for PbmpmNode {
                     });
                     pass.set_pipeline(&pipelines.bukkit_count);
                     pass.set_bind_group(0, &bk_count_bg, &[]);
-                    pass.dispatch_workgroups_indirect(state.particle_sim_dispatch_buffer.as_ref().unwrap(), 0);
+                    pass.dispatch_workgroups_indirect(
+                        state.particle_sim_dispatch_buffer.as_ref().unwrap(),
+                        0,
+                    );
                 }
 
                 // Bukkit allocate
@@ -379,12 +500,46 @@ impl Node for PbmpmNode {
                     "bukkit_allocate",
                     &BindGroupLayout::from(pipelines.bukkit_allocate.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        BindGroupEntry { binding: 1, resource: state.bukkit_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 2, resource: state.bukkit_dispatch.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 3, resource: state.bukkit_thread_data.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 4, resource: state.bukkit_particle_allocator.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 5, resource: state.bukkit_index_start.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: sim_uniform.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: state
+                                .bukkit_count_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 2,
+                            resource: state.bukkit_dispatch.as_ref().unwrap().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 3,
+                            resource: state
+                                .bukkit_thread_data
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 4,
+                            resource: state
+                                .bukkit_particle_allocator
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 5,
+                            resource: state
+                                .bukkit_index_start
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
                     ],
                 );
                 {
@@ -404,12 +559,46 @@ impl Node for PbmpmNode {
                     "bukkit_insert",
                     &BindGroupLayout::from(pipelines.bukkit_insert.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 2, resource: state.bukkit_count_buffer2.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 3, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 4, resource: state.bukkit_particle_data.as_ref().unwrap().as_entire_binding() },
-                        BindGroupEntry { binding: 5, resource: state.bukkit_index_start.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: sim_uniform.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: state
+                                .particle_count_buffer
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 2,
+                            resource: state
+                                .bukkit_count_buffer2
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 3,
+                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 4,
+                            resource: state
+                                .bukkit_particle_data
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 5,
+                            resource: state
+                                .bukkit_index_start
+                                .as_ref()
+                                .unwrap()
+                                .as_entire_binding(),
+                        },
                     ],
                 );
                 {
@@ -419,7 +608,10 @@ impl Node for PbmpmNode {
                     });
                     pass.set_pipeline(&pipelines.bukkit_insert);
                     pass.set_bind_group(0, &bk_insert_bg, &[]);
-                    pass.dispatch_workgroups_indirect(state.particle_sim_dispatch_buffer.as_ref().unwrap(), 0);
+                    pass.dispatch_workgroups_indirect(
+                        state.particle_sim_dispatch_buffer.as_ref().unwrap(),
+                        0,
+                    );
                 }
             }
 
@@ -439,8 +631,14 @@ impl Node for PbmpmNode {
                 "particle_render",
                 &BindGroupLayout::from(pipelines.particle_render.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry { binding: 0, resource: render_uniform.as_entire_binding() },
-                    BindGroupEntry { binding: 1, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: render_uniform.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
+                    },
                 ],
             );
 

@@ -1,6 +1,5 @@
 /// Shader source management.
 /// Common WGSL code is concatenated with per-shader code at initialization time.
-
 const COMMON: &str = include_str!("shaders/common.wgsl");
 const G2P2G: &str = include_str!("shaders/g2p2g.wgsl");
 const PARTICLE_EMIT: &str = include_str!("shaders/particle_emit.wgsl");

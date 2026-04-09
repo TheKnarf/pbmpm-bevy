@@ -1,5 +1,4 @@
 #[allow(dead_code)]
-
 use bevy::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
@@ -113,9 +112,15 @@ fn deserialize_f64_or_string<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             f.write_str("a number or string")
         }
-        fn visit_f64<E: de::Error>(self, v: f64) -> Result<f64, E> { Ok(v) }
-        fn visit_i64<E: de::Error>(self, v: i64) -> Result<f64, E> { Ok(v as f64) }
-        fn visit_u64<E: de::Error>(self, v: u64) -> Result<f64, E> { Ok(v as f64) }
+        fn visit_f64<E: de::Error>(self, v: f64) -> Result<f64, E> {
+            Ok(v)
+        }
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<f64, E> {
+            Ok(v as f64)
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<f64, E> {
+            Ok(v as f64)
+        }
         fn visit_str<E: de::Error>(self, v: &str) -> Result<f64, E> {
             v.parse().map_err(de::Error::custom)
         }
@@ -281,5 +286,5 @@ pub const PARTICLE_FLOAT_COUNT: u32 = 24; // 96 bytes / 4
 pub const GUARDIAN_SIZE: u32 = 3;
 
 pub fn div_up(a: u32, b: u32) -> u32 {
-    (a + b - 1) / b
+    a.div_ceil(b)
 }
