@@ -140,7 +140,7 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                 children![
                     (
                         button(ButtonProps::default(), (), Spawn((Text::new("Reset (F5)"), ThemedText))),
-                        observe(|_: On<Activate>, mut s: ResMut<SimState>| { s.do_reset = true; }),
+                        observe(|_: On<Activate>, mut commands: Commands| { commands.trigger(ResetSimulation); }),
                     ),
                     (
                         button(ButtonProps::default(), (), Spawn((Text::new("Pause"), ThemedText))),
@@ -156,12 +156,12 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                     (Text::new("Px/Cell"), ThemedText, TextFont { font_size: 11.0, ..default() }, Node { width: Val::Px(60.0), ..default() }),
                     (
                         button(ButtonProps::default(), PixelsPerCellButton, Spawn((Text::new(format!("{}", params.sim_res_divisor)), ThemedText))),
-                        observe(|ev: On<Activate>, mut p: ResMut<SimParams>, mut s: ResMut<SimState>,
+                        observe(|ev: On<Activate>, mut commands: Commands, mut p: ResMut<SimParams>,
                                 q: Query<&Children, With<PixelsPerCellButton>>, mut qt: Query<&mut Text>| {
                             let divs = [1u32, 2, 4, 8, 16];
                             let i = divs.iter().position(|&d| d == p.sim_res_divisor).unwrap_or(3);
                             p.sim_res_divisor = divs[(i + 1) % divs.len()];
-                            s.do_reset = true;
+                            commands.trigger(ResetSimulation);
                             update_btn_text(ev.event_target(), &q, &mut qt, &format!("{}", p.sim_res_divisor));
                         }),
                     ),
@@ -423,6 +423,7 @@ pub fn do_load_scene(
             for shape_data in new_shapes {
                 commands.spawn(shape_data);
             }
+            commands.trigger(ResetSimulation);
         }
         if let Ok(mut text) = q_name.single_mut() {
             text.0 = entry.name.clone();
@@ -607,9 +608,7 @@ pub fn sync_shape_sliders(
                 commands.entity(e).insert(SliderValue(shape.rotation));
             }
             if let Ok((e, _)) = q_emit_rate.single() {
-                commands
-                    .entity(e)
-                    .insert(SliderValue(shape.emission_rate));
+                commands.entity(e).insert(SliderValue(shape.emission_rate));
             }
         }
     } else {
@@ -641,7 +640,13 @@ pub fn sync_shape_sliders(
 }
 
 /// Save current scene to a JSON file.
-fn save_scene_to_file(_state: &SimState, params: &SimParams, shapes: &Query<&SimShapeData>, width: f32, height: f32) {
+fn save_scene_to_file(
+    _state: &SimState,
+    params: &SimParams,
+    shapes: &Query<&SimShapeData>,
+    width: f32,
+    height: f32,
+) {
     use serde::Serialize;
 
     #[derive(Serialize)]

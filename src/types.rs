@@ -300,11 +300,14 @@ impl From<&SimShapeData> for SimShape {
     }
 }
 
+/// Event fired to request a simulation reset.
+#[derive(Event)]
+pub struct ResetSimulation;
+
 // --- Simulation State Resource ---
 
 #[derive(Resource, Debug, Clone)]
 pub struct SimState {
-    pub do_reset: bool,
     pub is_paused: bool,
     pub substep_index: u32,
     pub grid_size: [u32; 2],
@@ -315,7 +318,6 @@ pub struct SimState {
 impl Default for SimState {
     fn default() -> Self {
         Self {
-            do_reset: true,
             is_paused: false,
             substep_index: 0,
             grid_size: [128, 72],

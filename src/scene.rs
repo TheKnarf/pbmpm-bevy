@@ -156,8 +156,6 @@ pub fn apply_scene(
         }
     }
 
-    sim_state.do_reset = true;
-
     shape_data_list
 }
 

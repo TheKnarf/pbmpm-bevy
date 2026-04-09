@@ -13,12 +13,17 @@ use node::*;
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
 pub struct PbmpmNodeLabel;
 
+/// Tracks whether a reset has been requested this frame.
+#[derive(Resource, Default)]
+struct ResetPending(bool);
+
 pub struct PbmpmPlugin;
 
 impl Plugin for PbmpmPlugin {
     fn build(&self, app: &mut App) {
-        // Main world: compute extracted data each frame
         app.init_resource::<ExtractedSimDataSource>();
+        app.init_resource::<ResetPending>();
+        app.add_observer(on_reset_requested);
 
         app.add_systems(PostUpdate, prepare_extracted_data);
 
@@ -40,6 +45,10 @@ impl Plugin for PbmpmPlugin {
     }
 }
 
+fn on_reset_requested(_trigger: On<ResetSimulation>, mut pending: ResMut<ResetPending>) {
+    pending.0 = true;
+}
+
 /// Source data prepared in main world, ready for extraction.
 #[derive(Resource, Default, Clone)]
 struct ExtractedSimDataSource(ExtractedSimData);
@@ -50,6 +59,7 @@ fn prepare_extracted_data(
     mut sim_state: ResMut<SimState>,
     input: Res<InputState>,
     particle_count: Res<ParticleCount>,
+    mut reset_pending: ResMut<ResetPending>,
     mut time_reg: ResMut<TimeRegulation>,
     time: Res<Time>,
     windows: Query<&Window>,
@@ -69,8 +79,10 @@ fn prepare_extracted_data(
     ];
     sim_state.resolution = [res_w, res_h];
 
+    let do_reset = reset_pending.0;
+
     // Reset substep index before computing substeps (matches original JS behavior)
-    if sim_state.do_reset {
+    if do_reset {
         sim_state.substep_index = 0;
     }
 
@@ -80,7 +92,7 @@ fn prepare_extracted_data(
         current_time_ms,
         params.sim_rate,
         sim_state.is_paused,
-        sim_state.do_reset,
+        do_reset,
     );
 
     let render_to_sim_scale = 1.0 / params.sim_res_divisor as f32;
@@ -157,7 +169,7 @@ fn prepare_extracted_data(
         shapes: gpu_shapes,
         grid_size: sim_state.grid_size,
         resolution: sim_state.resolution,
-        do_reset: sim_state.do_reset,
+        do_reset,
         is_paused: sim_state.is_paused,
         substep_count,
         substep_index: sim_state.substep_index,
@@ -173,7 +185,7 @@ fn prepare_extracted_data(
     if !sim_state.is_paused {
         sim_state.substep_index += substep_count;
     }
-    sim_state.do_reset = false;
+    reset_pending.0 = false;
 }
 
 fn extract_sim_data(mut commands: Commands, source: Extract<Res<ExtractedSimDataSource>>) {

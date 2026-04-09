@@ -103,22 +103,13 @@ fn setup(
             } else {
                 (1280.0, 720.0)
             };
-            let new_shapes = apply_scene(
-                &scene_file,
-                &mut sim_state,
-                &mut params,
-                w,
-                h,
-            );
+            let new_shapes = apply_scene(&scene_file, &mut sim_state, &mut params, w, h);
             let shape_count = new_shapes.len();
             for shape_data in new_shapes {
                 commands.spawn(shape_data);
             }
-            info!(
-                "Loaded scene: {} ({} shapes)",
-                entry.name,
-                shape_count
-            );
+            commands.trigger(ResetSimulation);
+            info!("Loaded scene: {} ({} shapes)", entry.name, shape_count);
         }
     }
     info!("PB-MPM initialized with {} scenes", manifest.0.len());
@@ -160,7 +151,7 @@ fn keyboard_system(
     existing_shapes: Query<Entity, With<SimShapeData>>,
 ) {
     if keys.just_pressed(KeyCode::F5) {
-        sim_state.do_reset = true;
+        commands.trigger(ResetSimulation);
     }
     if keys.just_pressed(KeyCode::Space) {
         sim_state.is_paused = !sim_state.is_paused;
