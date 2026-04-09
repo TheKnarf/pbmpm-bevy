@@ -57,6 +57,8 @@ pub struct ShapeTypeButton;
 pub struct ShapeFunctionButton;
 #[derive(Component)]
 pub struct ShapeMaterialButton;
+#[derive(Component)]
+pub struct UiPanel;
 
 pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<SceneManifest>) {
     let scene_name = manifest
@@ -68,7 +70,7 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
+            right: Val::Px(0.0),
             top: Val::Px(0.0),
             width: Val::Px(310.0),
             height: Val::Percent(100.0),
@@ -78,6 +80,7 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
             overflow: Overflow::scroll_y(),
             ..default()
         },
+        UiPanel,
         ThemeBackgroundColor(tokens::WINDOW_BG),
         GlobalZIndex(100),
         children![
@@ -494,6 +497,19 @@ pub fn update_shape_info(
 
     if let Ok(mut text) = q_info.single_mut() {
         text.0 = info_text;
+    }
+}
+
+/// Toggle UI panel visibility with backtick key
+pub fn toggle_ui(keys: Res<ButtonInput<KeyCode>>, mut q_panel: Query<&mut Node, With<UiPanel>>) {
+    if keys.just_pressed(KeyCode::Backquote) {
+        if let Ok(mut node) = q_panel.single_mut() {
+            if node.display == Display::None {
+                node.display = Display::Flex;
+            } else {
+                node.display = Display::None;
+            }
+        }
     }
 }
 

@@ -56,6 +56,7 @@ fn main() {
                 ui::sync_params,
                 ui::update_stats,
                 ui::update_shape_info,
+                ui::toggle_ui,
             ),
         )
         .run();

@@ -115,8 +115,8 @@ pub fn shape_mouse_interaction(
         return;
     };
 
-    // Don't interact if cursor is over the UI panel (left 310px)
-    if cursor.x < 310.0 {
+    // Don't interact if cursor is over the UI panel (right 310px)
+    if cursor.x > window.width() - 310.0 {
         interaction.hovered_index = None;
         return;
     }
@@ -157,7 +157,7 @@ pub fn shape_mouse_interaction(
                 mouse_start: mouse_pos,
                 shape_start_pos: shape_pos,
             });
-        } else if cursor.x >= 310.0 {
+        } else if cursor.x <= window.width() - 310.0 {
             // Deselect when clicking empty area (but not on UI panel)
             interaction.selected_index = None;
         }
