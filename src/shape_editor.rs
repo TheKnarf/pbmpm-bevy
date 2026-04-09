@@ -63,17 +63,16 @@ pub fn draw_shape_overlay(
     let w = window.width();
     let h = window.height();
 
-    // Draw mouse interaction radius when mouse is held down
-    if input.mouse_down {
-        let mouse_world = shape_to_world(input.mouse_position, w, h);
-        gizmos
-            .circle_2d(
-                Isometry2d::from_translation(mouse_world),
-                params.mouse_radius,
-                Color::srgba(0.5, 0.5, 0.5, 0.4),
-            )
-            .resolution(48);
-    }
+    // Draw mouse interaction radius circle at cursor position
+    let mouse_world = shape_to_world(input.mouse_position, w, h);
+    let alpha = if input.mouse_down { 0.5 } else { 0.15 };
+    gizmos
+        .circle_2d(
+            Isometry2d::from_translation(mouse_world),
+            params.mouse_radius,
+            Color::srgba(0.5, 0.5, 0.5, alpha),
+        )
+        .resolution(48);
 
     for (i, shape) in sim_state.shapes.iter().enumerate() {
         let is_selected = interaction.selected_index == Some(i);
