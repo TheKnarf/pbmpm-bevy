@@ -122,7 +122,7 @@ fn input_system(
 
     // Scroll wheel adjusts mouse interaction radius
     if scroll.delta.y != 0.0 {
-        params.mouse_radius *= 1.1_f32.powf(scroll.delta.y);
+        params.mouse_radius *= 1.01_f32.powf(scroll.delta.y);
         params.mouse_radius = params.mouse_radius.clamp(10.0, 1000.0);
     }
 }
