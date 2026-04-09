@@ -54,6 +54,7 @@ fn prepare_extracted_data(
     time: Res<Time>,
     windows: Query<&Window>,
     mut source: ResMut<ExtractedSimDataSource>,
+    shape_query: Query<&SimShapeData>,
 ) {
     let Ok(window) = windows.single() else {
         return;
@@ -85,19 +86,18 @@ fn prepare_extracted_data(
     let render_to_sim_scale = 1.0 / params.sim_res_divisor as f32;
 
     // Convert shapes to GPU format
-    let gpu_shapes: Vec<SimShapeGpu> = sim_state
-        .shapes
+    let gpu_shapes: Vec<SimShapeGpu> = shape_query
         .iter()
         .map(|s| {
             let mut pos = [
-                s.position.x as f32 * render_to_sim_scale,
-                s.position.y as f32 * render_to_sim_scale,
+                s.position.x * render_to_sim_scale,
+                s.position.y * render_to_sim_scale,
             ];
             // Flip Y
             pos[1] = sim_state.grid_size[1] as f32 - pos[1];
 
-            let shape_type = s.shape.as_f32();
-            if shape_type == 1.0 {
+            let shape_type = s.shape_type as f32;
+            if s.shape_type == 1 {
                 // Circle
                 SimShapeGpu {
                     position: pos,
@@ -105,25 +105,25 @@ fn prepare_extracted_data(
                     radius: s.radius * render_to_sim_scale,
                     rotation: s.rotation,
                     shape_type,
-                    functionality: s.function.as_f32(),
-                    emit_material: s.emit_material.as_f32(),
-                    emission_rate: s.emission_rate.as_f32(),
-                    emission_speed: s.emission_speed.as_f32(),
+                    functionality: s.function as f32,
+                    emit_material: s.emit_material as f32,
+                    emission_rate: s.emission_rate,
+                    emission_speed: s.emission_speed,
                     padding: 0.0,
                 }
             } else {
                 // Box
-                let hs = s.half_size.as_vec2() * render_to_sim_scale;
+                let hs = s.half_size * render_to_sim_scale;
                 SimShapeGpu {
                     position: pos,
                     half_size: [hs.x, hs.y],
                     radius: 0.0,
                     rotation: s.rotation,
                     shape_type,
-                    functionality: s.function.as_f32(),
-                    emit_material: s.emit_material.as_f32(),
-                    emission_rate: s.emission_rate.as_f32(),
-                    emission_speed: s.emission_speed.as_f32(),
+                    functionality: s.function as f32,
+                    emit_material: s.emit_material as f32,
+                    emission_rate: s.emission_rate,
+                    emission_speed: s.emission_speed,
                     padding: 0.0,
                 }
             }

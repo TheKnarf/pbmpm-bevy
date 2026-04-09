@@ -53,7 +53,7 @@ pub fn apply_scene(
     params: &mut SimParams,
     window_width: f32,
     window_height: f32,
-) {
+) -> Vec<SimShapeData> {
     let scene_width = scene.resolution[0] as f32;
     let scene_height = scene.resolution[1] as f32;
 
@@ -79,14 +79,14 @@ pub fn apply_scene(
         (res_h / params.sim_res_divisor as f32) as u32,
     ];
 
-    sim_state.shapes.clear();
+    let mut shape_data_list = Vec::new();
     for mut shape in scene.shapes.clone() {
         shape.position.x *= width_scale as f64;
         shape.position.y *= height_scale as f64;
         shape.half_size.x *= scale_scale as f64;
         shape.half_size.y *= scale_scale as f64;
         shape.radius *= scale_scale;
-        sim_state.shapes.push(shape);
+        shape_data_list.push(SimShapeData::from(&shape));
     }
 
     // Apply scene settings
@@ -157,6 +157,8 @@ pub fn apply_scene(
     }
 
     sim_state.do_reset = true;
+
+    shape_data_list
 }
 
 #[derive(Resource, Default)]

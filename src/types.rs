@@ -244,11 +244,66 @@ impl Default for SimParams {
     }
 }
 
+// --- SimShapeData Component (entity-based shape) ---
+
+#[derive(Component, Debug, Clone)]
+pub struct SimShapeData {
+    pub id: String,
+    pub position: Vec2,
+    pub half_size: Vec2,
+    pub rotation: f32,
+    pub shape_type: u32,
+    pub function: u32,
+    pub emit_material: u32,
+    pub emission_rate: f32,
+    pub emission_speed: f32,
+    pub radius: f32,
+}
+
+impl From<&SimShape> for SimShapeData {
+    fn from(s: &SimShape) -> Self {
+        Self {
+            id: s.id.clone(),
+            position: s.position.as_vec2(),
+            half_size: s.half_size.as_vec2(),
+            rotation: s.rotation,
+            shape_type: s.shape.as_u32(),
+            function: s.function.as_u32(),
+            emit_material: s.emit_material.as_u32(),
+            emission_rate: s.emission_rate.as_f32(),
+            emission_speed: s.emission_speed.as_f32(),
+            radius: s.radius,
+        }
+    }
+}
+
+impl From<&SimShapeData> for SimShape {
+    fn from(d: &SimShapeData) -> Self {
+        Self {
+            id: d.id.clone(),
+            position: Vec2Json {
+                x: d.position.x as f64,
+                y: d.position.y as f64,
+            },
+            half_size: Vec2Json {
+                x: d.half_size.x as f64,
+                y: d.half_size.y as f64,
+            },
+            rotation: d.rotation,
+            shape: StringOrNumber::Int(d.shape_type as i64),
+            function: StringOrNumber::Int(d.function as i64),
+            emit_material: StringOrNumber::Int(d.emit_material as i64),
+            emission_rate: StringOrNumber::Float(d.emission_rate as f64),
+            emission_speed: StringOrNumber::Float(d.emission_speed as f64),
+            radius: d.radius,
+        }
+    }
+}
+
 // --- Simulation State Resource ---
 
 #[derive(Resource, Debug, Clone)]
 pub struct SimState {
-    pub shapes: Vec<SimShape>,
     pub do_reset: bool,
     pub is_paused: bool,
     pub substep_index: u32,
@@ -260,7 +315,6 @@ pub struct SimState {
 impl Default for SimState {
     fn default() -> Self {
         Self {
-            shapes: Vec::new(),
             do_reset: true,
             is_paused: false,
             substep_index: 0,

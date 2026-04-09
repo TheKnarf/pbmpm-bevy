@@ -98,21 +98,26 @@ fn setup(
 
     if let Some(entry) = manifest.0.first() {
         if let Some(scene_file) = load_scene(&entry.scene) {
-            let Ok(window) = windows.single() else {
-                apply_scene(&scene_file, &mut sim_state, &mut params, 1280.0, 720.0);
-                return;
+            let (w, h) = if let Ok(window) = windows.single() {
+                (window.width(), window.height())
+            } else {
+                (1280.0, 720.0)
             };
-            apply_scene(
+            let new_shapes = apply_scene(
                 &scene_file,
                 &mut sim_state,
                 &mut params,
-                window.width(),
-                window.height(),
+                w,
+                h,
             );
+            let shape_count = new_shapes.len();
+            for shape_data in new_shapes {
+                commands.spawn(shape_data);
+            }
             info!(
                 "Loaded scene: {} ({} shapes)",
                 entry.name,
-                sim_state.shapes.len()
+                shape_count
             );
         }
     }
@@ -143,6 +148,7 @@ fn input_system(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn keyboard_system(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
@@ -151,6 +157,7 @@ fn keyboard_system(
     mut params: ResMut<SimParams>,
     windows: Query<&Window>,
     mut q_name: Query<&mut Text, With<ui::SceneNameLabel>>,
+    existing_shapes: Query<Entity, With<SimShapeData>>,
 ) {
     if keys.just_pressed(KeyCode::F5) {
         sim_state.do_reset = true;
@@ -167,11 +174,13 @@ fn keyboard_system(
     if keys.just_pressed(KeyCode::Tab) && !manifest.0.is_empty() {
         sim_state.scene_index = (sim_state.scene_index + 1) % manifest.0.len();
         ui::do_load_scene(
+            &mut commands,
             &mut sim_state,
             &mut params,
             &manifest,
             &windows,
             &mut q_name,
+            &existing_shapes,
         );
     }
 }

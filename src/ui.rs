@@ -110,23 +110,25 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                 children![
                     (
                         button(ButtonProps::default(), (), Spawn((Text::new("<"), ThemedText))),
-                        observe(|_: On<Activate>, mut state: ResMut<SimState>, mut params: ResMut<SimParams>,
+                        observe(|_: On<Activate>, mut commands: Commands, mut state: ResMut<SimState>, mut params: ResMut<SimParams>,
                                 manifest: Res<SceneManifest>, windows: Query<&Window>,
-                                mut q: Query<&mut Text, With<SceneNameLabel>>| {
+                                mut q: Query<&mut Text, With<SceneNameLabel>>,
+                                existing_shapes: Query<Entity, With<SimShapeData>>| {
                             if manifest.0.is_empty() { return; }
                             state.scene_index = (state.scene_index + manifest.0.len() - 1) % manifest.0.len();
-                            do_load_scene(&mut state, &mut params, &manifest, &windows, &mut q);
+                            do_load_scene(&mut commands, &mut state, &mut params, &manifest, &windows, &mut q, &existing_shapes);
                         }),
                     ),
                     (Text::new(scene_name), SceneNameLabel, ThemedText, TextFont { font_size: 13.0, ..default() }),
                     (
                         button(ButtonProps::default(), (), Spawn((Text::new(">"), ThemedText))),
-                        observe(|_: On<Activate>, mut state: ResMut<SimState>, mut params: ResMut<SimParams>,
+                        observe(|_: On<Activate>, mut commands: Commands, mut state: ResMut<SimState>, mut params: ResMut<SimParams>,
                                 manifest: Res<SceneManifest>, windows: Query<&Window>,
-                                mut q: Query<&mut Text, With<SceneNameLabel>>| {
+                                mut q: Query<&mut Text, With<SceneNameLabel>>,
+                                existing_shapes: Query<Entity, With<SimShapeData>>| {
                             if manifest.0.is_empty() { return; }
                             state.scene_index = (state.scene_index + 1) % manifest.0.len();
-                            do_load_scene(&mut state, &mut params, &manifest, &windows, &mut q);
+                            do_load_scene(&mut commands, &mut state, &mut params, &manifest, &windows, &mut q, &existing_shapes);
                         }),
                     ),
                 ],
@@ -253,13 +255,13 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                     (Text::new("Type"), ThemedText, TextFont { font_size: 11.0, ..default() }, Node { width: Val::Px(50.0), ..default() }),
                     (
                         button(ButtonProps::default(), ShapeTypeButton, Spawn((Text::new("--"), ThemedText))),
-                        observe(|ev: On<Activate>, mut state: ResMut<SimState>, interaction: Res<ShapeInteraction>,
+                        observe(|ev: On<Activate>, interaction: Res<ShapeInteraction>,
+                                mut shapes: Query<&mut SimShapeData>,
                                 q: Query<&Children, With<ShapeTypeButton>>, mut qt: Query<&mut Text>| {
-                            if let Some(idx) = interaction.selected_index {
-                                if let Some(shape) = state.shapes.get_mut(idx) {
-                                    let cur = shape.shape.as_f32() as u32;
-                                    let next = if cur == 0 { 1 } else { 0 };
-                                    shape.shape = StringOrNumber::Int(next as i64);
+                            if let Some(entity) = interaction.selected {
+                                if let Ok(mut shape) = shapes.get_mut(entity) {
+                                    let next = if shape.shape_type == 0 { 1 } else { 0 };
+                                    shape.shape_type = next;
                                     let label = if next == 0 { "Box" } else { "Circle" };
                                     update_btn_text(ev.event_target(), &q, &mut qt, label);
                                 }
@@ -268,13 +270,13 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                     ),
                     (
                         button(ButtonProps::default(), ShapeFunctionButton, Spawn((Text::new("--"), ThemedText))),
-                        observe(|ev: On<Activate>, mut state: ResMut<SimState>, interaction: Res<ShapeInteraction>,
+                        observe(|ev: On<Activate>, interaction: Res<ShapeInteraction>,
+                                mut shapes: Query<&mut SimShapeData>,
                                 q: Query<&Children, With<ShapeFunctionButton>>, mut qt: Query<&mut Text>| {
-                            if let Some(idx) = interaction.selected_index {
-                                if let Some(shape) = state.shapes.get_mut(idx) {
-                                    let cur = shape.function.as_f32() as u32;
-                                    let next = (cur + 1) % 4;
-                                    shape.function = StringOrNumber::Int(next as i64);
+                            if let Some(entity) = interaction.selected {
+                                if let Ok(mut shape) = shapes.get_mut(entity) {
+                                    let next = (shape.function + 1) % 4;
+                                    shape.function = next;
                                     let label = match next { 0 => "Emit", 1 => "Collider", 2 => "Drain", _ => "InitEmit" };
                                     update_btn_text(ev.event_target(), &q, &mut qt, label);
                                 }
@@ -283,13 +285,13 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                     ),
                     (
                         button(ButtonProps::default(), ShapeMaterialButton, Spawn((Text::new("--"), ThemedText))),
-                        observe(|ev: On<Activate>, mut state: ResMut<SimState>, interaction: Res<ShapeInteraction>,
+                        observe(|ev: On<Activate>, interaction: Res<ShapeInteraction>,
+                                mut shapes: Query<&mut SimShapeData>,
                                 q: Query<&Children, With<ShapeMaterialButton>>, mut qt: Query<&mut Text>| {
-                            if let Some(idx) = interaction.selected_index {
-                                if let Some(shape) = state.shapes.get_mut(idx) {
-                                    let cur = shape.emit_material.as_f32() as u32;
-                                    let next = (cur + 1) % 4;
-                                    shape.emit_material = StringOrNumber::Int(next as i64);
+                            if let Some(entity) = interaction.selected {
+                                if let Ok(mut shape) = shapes.get_mut(entity) {
+                                    let next = (shape.emit_material + 1) % 4;
+                                    shape.emit_material = next;
                                     let label = match next { 0 => "Liquid", 1 => "Elastic", 2 => "Sand", _ => "Visco" };
                                     update_btn_text(ev.event_target(), &q, &mut qt, label);
                                 }
@@ -316,11 +318,12 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                     |_: On<Activate>,
                      state: Res<SimState>,
                      params: Res<SimParams>,
-                     windows: Query<&Window>| {
+                     windows: Query<&Window>,
+                     shapes: Query<&SimShapeData>| {
                         let Ok(window) = windows.single() else {
                             return;
                         };
-                        save_scene_to_file(&state, &params, window.width(), window.height());
+                        save_scene_to_file(&state, &params, &shapes, window.width(), window.height());
                     },
                 ),
             ),
@@ -393,23 +396,33 @@ fn update_btn_text(
 }
 
 pub fn do_load_scene(
+    commands: &mut Commands,
     sim_state: &mut SimState,
     params: &mut SimParams,
     manifest: &SceneManifest,
     windows: &Query<&Window>,
     q_name: &mut Query<&mut Text, With<SceneNameLabel>>,
+    existing_shapes: &Query<Entity, With<SimShapeData>>,
 ) {
     if let Some(entry) = manifest.0.get(sim_state.scene_index) {
         if let Some(scene_file) = load_scene(&entry.scene) {
             let Ok(window) = windows.single() else { return };
             *params = SimParams::default();
-            apply_scene(
+            // Despawn old shape entities
+            for entity in existing_shapes.iter() {
+                commands.entity(entity).despawn();
+            }
+            let new_shapes = apply_scene(
                 &scene_file,
                 sim_state,
                 params,
                 window.width(),
                 window.height(),
             );
+            // Spawn new shape entities
+            for shape_data in new_shapes {
+                commands.spawn(shape_data);
+            }
         }
         if let Ok(mut text) = q_name.single_mut() {
             text.0 = entry.name.clone();
@@ -474,28 +487,28 @@ pub fn sync_params(
 
 /// Update the shape info label and button text based on current selection
 pub fn update_shape_info(
-    sim_state: Res<SimState>,
     interaction: Res<ShapeInteraction>,
+    shapes: Query<&SimShapeData>,
     mut q_info: Query<&mut Text, With<ShapeInfoLabel>>,
     q_type_btn: Query<&Children, With<ShapeTypeButton>>,
     q_func_btn: Query<&Children, With<ShapeFunctionButton>>,
     q_mat_btn: Query<&Children, With<ShapeMaterialButton>>,
     mut q_text: Query<&mut Text, (Without<ShapeInfoLabel>, Without<GridStatsLabel>)>,
 ) {
-    let info_text = if let Some(idx) = interaction.selected_index {
-        if let Some(shape) = sim_state.shapes.get(idx) {
-            let shape_type = if shape.shape.as_f32() as u32 == 0 {
+    let info_text = if let Some(entity) = interaction.selected {
+        if let Ok(shape) = shapes.get(entity) {
+            let shape_type = if shape.shape_type == 0 {
                 "Box"
             } else {
                 "Circle"
             };
-            let func = match shape.function.as_f32() as u32 {
+            let func = match shape.function {
                 0 => "Emit",
                 1 => "Collider",
                 2 => "Drain",
                 _ => "InitEmit",
             };
-            let mat = match shape.emit_material.as_f32() as u32 {
+            let mat = match shape.emit_material {
                 0 => "Liquid",
                 1 => "Elastic",
                 2 => "Sand",
@@ -555,30 +568,30 @@ pub fn toggle_ui(keys: Res<ButtonInput<KeyCode>>, mut q_panel: Query<&mut Node, 
 #[allow(clippy::too_many_arguments)]
 pub fn sync_shape_sliders(
     mut commands: Commands,
-    mut sim_state: ResMut<SimState>,
     interaction: Res<ShapeInteraction>,
+    mut shapes: Query<&mut SimShapeData>,
     q_size_x: Query<(Entity, &SliderValue), With<ShapeSizeXSlider>>,
     q_size_y: Query<(Entity, &SliderValue), With<ShapeSizeYSlider>>,
     q_rotation: Query<(Entity, &SliderValue), With<ShapeRotationSlider>>,
     q_emit_rate: Query<(Entity, &SliderValue), With<ShapeEmitRateSlider>>,
-    mut prev_selection: Local<Option<usize>>,
+    mut prev_selection: Local<Option<Entity>>,
 ) {
-    let Some(idx) = interaction.selected_index else {
+    let Some(entity) = interaction.selected else {
         *prev_selection = None;
         return;
     };
-    let selection_changed = *prev_selection != Some(idx);
-    *prev_selection = Some(idx);
+    let selection_changed = *prev_selection != Some(entity);
+    *prev_selection = Some(entity);
 
     if selection_changed {
         // Push shape values to sliders when selection changes
-        if let Some(shape) = sim_state.shapes.get(idx) {
-            let is_circle = shape.shape.as_f32() as u32 == 1;
+        if let Ok(shape) = shapes.get(entity) {
+            let is_circle = shape.shape_type == 1;
             if let Ok((e, _)) = q_size_x.single() {
                 let val = if is_circle {
                     shape.radius
                 } else {
-                    shape.half_size.x as f32
+                    shape.half_size.x
                 };
                 commands.entity(e).insert(SliderValue(val));
             }
@@ -586,7 +599,7 @@ pub fn sync_shape_sliders(
                 let val = if is_circle {
                     shape.radius
                 } else {
-                    shape.half_size.y as f32
+                    shape.half_size.y
                 };
                 commands.entity(e).insert(SliderValue(val));
             }
@@ -596,39 +609,39 @@ pub fn sync_shape_sliders(
             if let Ok((e, _)) = q_emit_rate.single() {
                 commands
                     .entity(e)
-                    .insert(SliderValue(shape.emission_rate.as_f32()));
+                    .insert(SliderValue(shape.emission_rate));
             }
         }
     } else {
         // Pull slider values into shape
-        if let Some(shape) = sim_state.shapes.get_mut(idx) {
-            let is_circle = shape.shape.as_f32() as u32 == 1;
+        if let Ok(mut shape) = shapes.get_mut(entity) {
+            let is_circle = shape.shape_type == 1;
             if let Ok((_, v)) = q_size_x.single() {
                 if is_circle {
                     shape.radius = v.0;
                 } else {
-                    shape.half_size.x = v.0 as f64;
+                    shape.half_size.x = v.0;
                 }
             }
             if let Ok((_, v)) = q_size_y.single() {
                 if is_circle {
                     shape.radius = v.0;
                 } else {
-                    shape.half_size.y = v.0 as f64;
+                    shape.half_size.y = v.0;
                 }
             }
             if let Ok((_, v)) = q_rotation.single() {
                 shape.rotation = v.0;
             }
             if let Ok((_, v)) = q_emit_rate.single() {
-                shape.emission_rate = StringOrNumber::Float(v.0 as f64);
+                shape.emission_rate = v.0;
             }
         }
     }
 }
 
 /// Save current scene to a JSON file.
-fn save_scene_to_file(state: &SimState, params: &SimParams, width: f32, height: f32) {
+fn save_scene_to_file(_state: &SimState, params: &SimParams, shapes: &Query<&SimShapeData>, width: f32, height: f32) {
     use serde::Serialize;
 
     #[derive(Serialize)]
@@ -674,11 +687,13 @@ fn save_scene_to_file(state: &SimState, params: &SimParams, width: f32, height: 
     save_if_changed!("plasticity", plasticity, "range");
     save_if_changed!("borderFriction", border_friction, "range");
 
+    let sim_shapes: Vec<SimShape> = shapes.iter().map(SimShape::from).collect();
+
     let scene = SavedScene {
         version: 2,
         resolution: [width as f64, height as f64],
         settings,
-        shapes: state.shapes.clone(),
+        shapes: sim_shapes,
     };
 
     let path = "saved_scene.json";
@@ -698,6 +713,7 @@ fn save_scene_to_file(state: &SimState, params: &SimParams, width: f32, height: 
 pub fn update_stats(
     sim_state: Res<SimState>,
     particle_count: Res<ParticleCount>,
+    shapes: Query<&SimShapeData>,
     mut q_stats: Query<&mut Text, With<GridStatsLabel>>,
 ) {
     if let Ok(mut text) = q_stats.single_mut() {
@@ -706,7 +722,7 @@ pub fn update_stats(
             "Grid: {}x{} | Shapes: {} | Particles: {:.1}k",
             sim_state.grid_size[0],
             sim_state.grid_size[1],
-            sim_state.shapes.len(),
+            shapes.iter().count(),
             count as f32 / 1000.0
         );
     }
