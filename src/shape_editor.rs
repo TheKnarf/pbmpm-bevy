@@ -52,6 +52,8 @@ fn dist_to_box(point: Vec2, center: Vec2, half_size: Vec2, rotation_deg: f32) ->
 pub fn draw_shape_overlay(
     mut gizmos: Gizmos,
     sim_state: Res<SimState>,
+    input: Res<InputState>,
+    params: Res<SimParams>,
     interaction: Res<ShapeInteraction>,
     windows: Query<&Window>,
 ) {
@@ -60,6 +62,18 @@ pub fn draw_shape_overlay(
     };
     let w = window.width();
     let h = window.height();
+
+    // Draw mouse interaction radius when mouse is held down
+    if input.mouse_down {
+        let mouse_world = shape_to_world(input.mouse_position, w, h);
+        gizmos
+            .circle_2d(
+                Isometry2d::from_translation(mouse_world),
+                params.mouse_radius,
+                Color::srgba(0.5, 0.5, 0.5, 0.4),
+            )
+            .resolution(48);
+    }
 
     for (i, shape) in sim_state.shapes.iter().enumerate() {
         let is_selected = interaction.selected_index == Some(i);

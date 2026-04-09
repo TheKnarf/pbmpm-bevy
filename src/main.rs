@@ -8,6 +8,7 @@ mod types;
 mod ui;
 
 use bevy::feathers::FeathersPlugins;
+use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
@@ -105,15 +106,25 @@ fn setup(
 
 fn input_system(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window>,
     mut input: ResMut<InputState>,
+    mut params: ResMut<SimParams>,
+    interaction: Res<shape_editor::ShapeInteraction>,
 ) {
     let Ok(window) = windows.single() else { return };
     input.mouse_prev_position = input.mouse_position;
     if let Some(pos) = window.cursor_position() {
         input.mouse_position = pos;
     }
-    input.mouse_down = mouse_buttons.pressed(MouseButton::Left);
+    // Mouse down only when not dragging a shape
+    input.mouse_down = mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none();
+
+    // Scroll wheel adjusts mouse interaction radius when mouse is down
+    if input.mouse_down && scroll.delta.y != 0.0 {
+        params.mouse_radius *= 1.1_f32.powf(scroll.delta.y);
+        params.mouse_radius = params.mouse_radius.clamp(10.0, 1000.0);
+    }
 }
 
 fn keyboard_system(
