@@ -6,7 +6,6 @@ description = "Position Based Material Point Method - Rust/Bevy port"
 
 [dependencies]
 bevy = { version = "0.18", features = ["dynamic_linking", "experimental_bevy_feathers"] }
-wgpu = "27"
 bytemuck = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

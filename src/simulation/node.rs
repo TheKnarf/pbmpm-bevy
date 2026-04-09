@@ -2,9 +2,9 @@ use std::cell::UnsafeCell;
 
 use bevy::prelude::*;
 use bevy::render::render_graph::{Node, NodeRunError, RenderGraphContext};
+use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderContext, RenderDevice};
 use bevy::render::view::ViewTarget;
-use wgpu::util::DeviceExt;
 
 use bytemuck::Zeroable;
 
@@ -52,7 +52,7 @@ impl Default for ExtractedSimData {
 /// Inner mutable state for the node, wrapped in UnsafeCell for interior mutability.
 struct PbmpmNodeInner {
     pipelines: Option<PbmpmPipelines>,
-    pipeline_format: Option<wgpu::TextureFormat>,
+    pipeline_format: Option<TextureFormat>,
     state: GpuSimState,
     buffer_idx: u32,
     view_target_query: Option<QueryState<&'static ViewTarget>>,
@@ -84,7 +84,7 @@ impl Default for PbmpmNode {
 }
 
 impl PbmpmNodeInner {
-    fn ensure_pipelines(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat) {
+    fn ensure_pipelines(&mut self, device: &RenderDevice, format: TextureFormat) {
         if self.pipelines.is_none() || self.pipeline_format != Some(format) {
             info!("Creating PB-MPM GPU pipelines for format {:?}...", format);
             self.pipelines = Some(PbmpmPipelines::new(device, format));
@@ -176,8 +176,7 @@ impl Node for PbmpmNode {
         };
 
         // Get device from world resource to avoid borrow conflicts with render_context
-        let render_device = world.resource::<RenderDevice>();
-        let device = render_device.wgpu_device();
+        let device = world.resource::<RenderDevice>();
 
         // Get the surface format from the ViewTarget (camera's render texture)
         let (surface_format, view_texture) = {
@@ -205,10 +204,10 @@ impl Node for PbmpmNode {
         } else {
             data.shapes.clone()
         };
-        let shape_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let shape_buffer = device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("shapes"),
             contents: bytemuck::cast_slice(&shapes),
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: BufferUsages::STORAGE,
         });
 
         let encoder = render_context.command_encoder();
@@ -235,10 +234,10 @@ impl Node for PbmpmNode {
 
             for iteration in 0..data.params.iteration_count {
                 let sim_constants = this.build_sim_constants(data, iteration, substep_index);
-                let sim_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                let sim_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
                     label: Some("sim_constants"),
                     contents: bytemuck::cast_slice(&[sim_constants]),
-                    usage: wgpu::BufferUsages::UNIFORM,
+                    usage: BufferUsages::UNIFORM,
                 });
 
                 let current_grid = state.grid_buffers[this.buffer_idx as usize].as_ref().unwrap();
@@ -247,24 +246,24 @@ impl Node for PbmpmNode {
                 this.buffer_idx = (this.buffer_idx + 1) % 3;
 
                 // G2P2G dispatch
-                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("g2p2g"),
-                    layout: &pipelines.g2p2g.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: current_grid.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: next_grid.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 4, resource: next_next_grid.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 5, resource: state.bukkit_thread_data.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 6, resource: state.bukkit_particle_data.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 7, resource: shape_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 8, resource: state.particle_free_indices_buffer.as_ref().unwrap().as_entire_binding() },
+                let bind_group = device.create_bind_group(
+                    "g2p2g",
+                    &BindGroupLayout::from(pipelines.g2p2g.get_bind_group_layout(0)),
+                    &[
+                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
+                        BindGroupEntry { binding: 1, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 2, resource: current_grid.as_entire_binding() },
+                        BindGroupEntry { binding: 3, resource: next_grid.as_entire_binding() },
+                        BindGroupEntry { binding: 4, resource: next_next_grid.as_entire_binding() },
+                        BindGroupEntry { binding: 5, resource: state.bukkit_thread_data.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 6, resource: state.bukkit_particle_data.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 7, resource: shape_buffer.as_entire_binding() },
+                        BindGroupEntry { binding: 8, resource: state.particle_free_indices_buffer.as_ref().unwrap().as_entire_binding() },
                     ],
-                });
+                );
 
                 {
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                         label: Some("g2p2g"),
                         timestamp_writes: None,
                     });
@@ -277,33 +276,33 @@ impl Node for PbmpmNode {
             // Emission
             {
                 let sim_constants = this.build_sim_constants(data, 0, substep_index);
-                let sim_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                let sim_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
                     label: Some("sim_constants_emit"),
                     contents: bytemuck::cast_slice(&[sim_constants]),
-                    usage: wgpu::BufferUsages::UNIFORM,
+                    usage: BufferUsages::UNIFORM,
                 });
 
                 let grid = state.grid_buffers[this.buffer_idx as usize].as_ref().unwrap();
 
                 // Particle emit
-                let emit_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("particle_emit"),
-                    layout: &pipelines.particle_emit.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: shape_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 4, resource: state.particle_free_indices_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 5, resource: grid.as_entire_binding() },
+                let emit_bg = device.create_bind_group(
+                    "particle_emit",
+                    &BindGroupLayout::from(pipelines.particle_emit.get_bind_group_layout(0)),
+                    &[
+                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
+                        BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 2, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 3, resource: shape_buffer.as_entire_binding() },
+                        BindGroupEntry { binding: 4, resource: state.particle_free_indices_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 5, resource: grid.as_entire_binding() },
                     ],
-                });
+                );
 
                 let grid_dispatch_x = div_up(data.grid_size[0], GRID_DISPATCH_SIZE);
                 let grid_dispatch_y = div_up(data.grid_size[1], GRID_DISPATCH_SIZE);
 
                 {
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                         label: Some("particle_emit"),
                         timestamp_writes: None,
                     });
@@ -313,17 +312,17 @@ impl Node for PbmpmNode {
                 }
 
                 // Set indirect args
-                let args_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("set_indirect_args"),
-                    layout: &pipelines.set_indirect_args.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: state.particle_sim_dispatch_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: state.particle_render_dispatch_buffer.as_ref().unwrap().as_entire_binding() },
+                let args_bg = device.create_bind_group(
+                    "set_indirect_args",
+                    &BindGroupLayout::from(pipelines.set_indirect_args.get_bind_group_layout(0)),
+                    &[
+                        BindGroupEntry { binding: 0, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 1, resource: state.particle_sim_dispatch_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 2, resource: state.particle_render_dispatch_buffer.as_ref().unwrap().as_entire_binding() },
                     ],
-                });
+                );
                 {
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                         label: Some("set_indirect_args"),
                         timestamp_writes: None,
                     });
@@ -336,10 +335,10 @@ impl Node for PbmpmNode {
             // Bukkitize particles
             {
                 let sim_constants = this.build_sim_constants(data, 0, substep_index);
-                let sim_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                let sim_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
                     label: Some("sim_constants_bukkit"),
                     contents: bytemuck::cast_slice(&[sim_constants]),
-                    usage: wgpu::BufferUsages::UNIFORM,
+                    usage: BufferUsages::UNIFORM,
                 });
 
                 // Clear bukkit buffers
@@ -355,18 +354,18 @@ impl Node for PbmpmNode {
                 );
 
                 // Bukkit count
-                let bk_count_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("bukkit_count"),
-                    layout: &pipelines.bukkit_count.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: state.bukkit_count_buffer.as_ref().unwrap().as_entire_binding() },
+                let bk_count_bg = device.create_bind_group(
+                    "bukkit_count",
+                    &BindGroupLayout::from(pipelines.bukkit_count.get_bind_group_layout(0)),
+                    &[
+                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
+                        BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 2, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 3, resource: state.bukkit_count_buffer.as_ref().unwrap().as_entire_binding() },
                     ],
-                });
+                );
                 {
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                         label: Some("bukkit_count"),
                         timestamp_writes: None,
                     });
@@ -376,22 +375,22 @@ impl Node for PbmpmNode {
                 }
 
                 // Bukkit allocate
-                let bk_alloc_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("bukkit_allocate"),
-                    layout: &pipelines.bukkit_allocate.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: state.bukkit_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: state.bukkit_dispatch.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: state.bukkit_thread_data.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 4, resource: state.bukkit_particle_allocator.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 5, resource: state.bukkit_index_start.as_ref().unwrap().as_entire_binding() },
+                let bk_alloc_bg = device.create_bind_group(
+                    "bukkit_allocate",
+                    &BindGroupLayout::from(pipelines.bukkit_allocate.get_bind_group_layout(0)),
+                    &[
+                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
+                        BindGroupEntry { binding: 1, resource: state.bukkit_count_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 2, resource: state.bukkit_dispatch.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 3, resource: state.bukkit_thread_data.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 4, resource: state.bukkit_particle_allocator.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 5, resource: state.bukkit_index_start.as_ref().unwrap().as_entire_binding() },
                     ],
-                });
+                );
                 {
                     let bk_dispatch_x = div_up(data.bukkit_count_x, GRID_DISPATCH_SIZE);
                     let bk_dispatch_y = div_up(data.bukkit_count_y, GRID_DISPATCH_SIZE);
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                         label: Some("bukkit_allocate"),
                         timestamp_writes: None,
                     });
@@ -401,20 +400,20 @@ impl Node for PbmpmNode {
                 }
 
                 // Bukkit insert
-                let bk_insert_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("bukkit_insert"),
-                    layout: &pipelines.bukkit_insert.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: state.bukkit_count_buffer2.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 4, resource: state.bukkit_particle_data.as_ref().unwrap().as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 5, resource: state.bukkit_index_start.as_ref().unwrap().as_entire_binding() },
+                let bk_insert_bg = device.create_bind_group(
+                    "bukkit_insert",
+                    &BindGroupLayout::from(pipelines.bukkit_insert.get_bind_group_layout(0)),
+                    &[
+                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
+                        BindGroupEntry { binding: 1, resource: state.particle_count_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 2, resource: state.bukkit_count_buffer2.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 3, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 4, resource: state.bukkit_particle_data.as_ref().unwrap().as_entire_binding() },
+                        BindGroupEntry { binding: 5, resource: state.bukkit_index_start.as_ref().unwrap().as_entire_binding() },
                     ],
-                });
+                );
                 {
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                         label: Some("bukkit_insert"),
                         timestamp_writes: None,
                     });
@@ -430,32 +429,30 @@ impl Node for PbmpmNode {
         // Render particles to the camera's ViewTarget texture
         if let Some(ref target_view) = view_texture {
             let render_constants = this.build_render_constants(data);
-            let render_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            let render_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
                 label: Some("render_constants"),
                 contents: bytemuck::cast_slice(&[render_constants]),
-                usage: wgpu::BufferUsages::UNIFORM,
+                usage: BufferUsages::UNIFORM,
             });
 
-            let render_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("particle_render"),
-                layout: &pipelines.particle_render.get_bind_group_layout(0),
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: render_uniform.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
+            let render_bg = device.create_bind_group(
+                "particle_render",
+                &BindGroupLayout::from(pipelines.particle_render.get_bind_group_layout(0)),
+                &[
+                    BindGroupEntry { binding: 0, resource: render_uniform.as_entire_binding() },
+                    BindGroupEntry { binding: 1, resource: state.particle_buffer.as_ref().unwrap().as_entire_binding() },
                 ],
-            });
+            );
 
             {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("particle_render"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    color_attachments: &[Some(RenderPassColorAttachment {
                         view: target_view,
                         resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0, g: 0.0, b: 0.0, a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
+                        ops: Operations {
+                            load: LoadOp::Clear(Default::default()),
+                            store: StoreOp::Store,
                         },
                         depth_slice: None,
                     })],
