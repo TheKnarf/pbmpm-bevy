@@ -29,7 +29,7 @@ impl TimeRegulation {
         do_pause: bool,
         do_reset: bool,
     ) -> u32 {
-        if do_reset {
+        if do_pause || do_reset {
             self.estimated_render_timestep_ms = 1000.0 / 60.0;
             self.prev_time_ms = current_time_ms - self.estimated_render_timestep_ms;
             self.sim_frame_count_cap = 20;
