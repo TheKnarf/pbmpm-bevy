@@ -66,6 +66,11 @@ fn prepare_extracted_data(
     ];
     sim_state.resolution = [res_w, res_h];
 
+    // Reset substep index before computing substeps (matches original JS behavior)
+    if sim_state.do_reset {
+        sim_state.substep_index = 0;
+    }
+
     // Compute substeps
     let current_time_ms = time.elapsed_secs_f64() * 1000.0;
     let substep_count = time_reg.compute_substeps(
@@ -161,12 +166,9 @@ fn prepare_extracted_data(
         bukkit_count_y,
     };
 
-    // Update main world state
+    // Advance substep index (reset already handled above before extraction)
     if !sim_state.is_paused {
         sim_state.substep_index += substep_count;
-    }
-    if sim_state.do_reset {
-        sim_state.substep_index = 0;
     }
     sim_state.do_reset = false;
 }

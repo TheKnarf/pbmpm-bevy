@@ -229,11 +229,6 @@ impl Node for PbmpmNode {
         let mut substep_index = data.substep_index;
 
         for _substep in 0..substep_count {
-            // Clear grid buffers for this substep
-            for buf in state.grid_buffers.iter().flatten() {
-                encoder.clear_buffer(buf, 0, None);
-            }
-
             for iteration in 0..data.params.iteration_count {
                 let sim_constants = this.build_sim_constants(data, iteration, substep_index);
                 let sim_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
