@@ -49,7 +49,6 @@ pub fn load_scene(path: &str) -> Option<SceneFile> {
 
 pub fn apply_scene(
     scene: &SceneFile,
-    sim_state: &mut SimState,
     params: &mut SimParams,
     window_width: f32,
     window_height: f32,
@@ -73,12 +72,6 @@ pub fn apply_scene(
     let height_scale = res_h / scene_height;
     let scale_scale = (width_scale * height_scale).sqrt();
 
-    sim_state.resolution = [res_w, res_h];
-    sim_state.grid_size = [
-        (res_w / params.sim_res_divisor as f32) as u32,
-        (res_h / params.sim_res_divisor as f32) as u32,
-    ];
-
     let mut shape_data_list = Vec::new();
     for mut shape in scene.shapes.clone() {
         shape.position.x *= width_scale as f64;
@@ -89,70 +82,34 @@ pub fn apply_scene(
         shape_data_list.push(SimShapeData::from(&shape));
     }
 
-    // Apply scene settings
+    // Apply scene settings via a table of (json key, applier).
+    type Applier = fn(&mut SimParams, f64);
+    const SETTING_APPLIERS: &[(&str, Applier)] = &[
+        ("iterationCount", |p, v| p.iteration_count = v as u32),
+        ("simResDivisor", |p, v| p.sim_res_divisor = v as u32),
+        ("particlesPerCellAxis", |p, v| {
+            p.particles_per_cell_axis = v as u32
+        }),
+        ("simRate", |p, v| p.sim_rate = v as u32),
+        ("gravityStrength", |p, v| p.gravity_strength = v as f32),
+        ("liquidViscosity", |p, v| p.liquid_viscosity = v as f32),
+        ("elasticityRatio", |p, v| p.elasticity_ratio = v as f32),
+        ("liquidRelaxation", |p, v| p.liquid_relaxation = v as f32),
+        ("elasticRelaxation", |p, v| p.elastic_relaxation = v as f32),
+        ("frictionAngle", |p, v| p.friction_angle = v as f32),
+        ("plasticity", |p, v| p.plasticity = v as f32),
+        ("borderFriction", |p, v| p.border_friction = v as f32),
+    ];
+
     for setting in &scene.settings {
-        match setting.name.as_str() {
-            "iterationCount" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.iteration_count = v as u32;
-                }
+        let Some(value) = setting.value.as_f64() else {
+            continue;
+        };
+        for (key, applier) in SETTING_APPLIERS {
+            if setting.name == *key {
+                applier(params, value);
+                break;
             }
-            "simResDivisor" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.sim_res_divisor = v as u32;
-                }
-            }
-            "particlesPerCellAxis" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.particles_per_cell_axis = v as u32;
-                }
-            }
-            "gravityStrength" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.gravity_strength = v as f32;
-                }
-            }
-            "liquidViscosity" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.liquid_viscosity = v as f32;
-                }
-            }
-            "elasticityRatio" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.elasticity_ratio = v as f32;
-                }
-            }
-            "liquidRelaxation" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.liquid_relaxation = v as f32;
-                }
-            }
-            "elasticRelaxation" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.elastic_relaxation = v as f32;
-                }
-            }
-            "frictionAngle" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.friction_angle = v as f32;
-                }
-            }
-            "plasticity" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.plasticity = v as f32;
-                }
-            }
-            "borderFriction" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.border_friction = v as f32;
-                }
-            }
-            "simRate" => {
-                if let Some(v) = setting.value.as_f64() {
-                    params.sim_rate = v as u32;
-                }
-            }
-            _ => {}
         }
     }
 
@@ -161,3 +118,53 @@ pub fn apply_scene(
 
 #[derive(Resource, Default)]
 pub struct SceneManifest(pub Vec<SceneManifestEntry>);
+
+/// Observer for `LoadScene` events. Despawns existing shape entities, parses
+/// the scene JSON, applies its settings to `SimParams`, and spawns new shape
+/// entities. UI synchronization is handled by a follow-up observer in `ui`.
+pub fn on_load_scene(
+    trigger: On<LoadScene>,
+    mut commands: Commands,
+    mut sim_state: ResMut<SimState>,
+    mut params: ResMut<SimParams>,
+    manifest: Res<SceneManifest>,
+    windows: Query<&Window>,
+    existing_shapes: Query<Entity, With<SimShapeData>>,
+) {
+    let idx = trigger.event().0;
+    if idx >= manifest.0.len() {
+        return;
+    }
+    sim_state.scene_index = idx;
+    let entry = &manifest.0[idx];
+    let Some(scene_file) = load_scene(&entry.scene) else {
+        return;
+    };
+    let Ok(window) = windows.single() else {
+        return;
+    };
+
+    // Reset params to defaults, then apply scene-specific overrides.
+    *params = SimParams::default();
+
+    for entity in existing_shapes.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    let new_shapes = apply_scene(&scene_file, &mut params, window.width(), window.height());
+    for shape_data in new_shapes {
+        commands.spawn(shape_data);
+    }
+
+    commands.trigger(SceneLoadedEvent {
+        name: entry.name.clone(),
+    });
+    commands.trigger(ResetSimulation);
+}
+
+/// Fired by `on_load_scene` after a scene has been loaded into the world,
+/// for UI observers to update labels and sliders.
+#[derive(Event)]
+pub struct SceneLoadedEvent {
+    pub name: String,
+}

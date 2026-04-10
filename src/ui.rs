@@ -540,9 +540,8 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                              mut qt: Query<&mut Text>| {
                                 if let Some(entity) = interaction.selected {
                                     if let Ok(mut shape) = shapes.get_mut(entity) {
-                                        let next =
-                                            ShapeType::from_u32(shape.shape_type).cycle_next();
-                                        shape.shape_type = next as u32;
+                                        let next = shape.shape_type.cycle_next();
+                                        shape.shape_type = next;
                                         update_btn_text(
                                             ev.event_target(),
                                             &q,
@@ -568,9 +567,8 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                              mut qt: Query<&mut Text>| {
                                 if let Some(entity) = interaction.selected {
                                     if let Ok(mut shape) = shapes.get_mut(entity) {
-                                        let next =
-                                            ShapeFunction::from_u32(shape.function).cycle_next();
-                                        shape.function = next as u32;
+                                        let next = shape.function.cycle_next();
+                                        shape.function = next;
                                         update_btn_text(
                                             ev.event_target(),
                                             &q,
@@ -596,9 +594,8 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                              mut qt: Query<&mut Text>| {
                                 if let Some(entity) = interaction.selected {
                                     if let Ok(mut shape) = shapes.get_mut(entity) {
-                                        let next = MaterialType::from_u32(shape.emit_material)
-                                            .cycle_next();
-                                        shape.emit_material = next as u32;
+                                        let next = shape.emit_material.cycle_next();
+                                        shape.emit_material = next;
                                         update_btn_text(
                                             ev.event_target(),
                                             &q,
@@ -803,63 +800,20 @@ fn push_params_to_sliders(
     }
 }
 
-/// Observer for `LoadScene` events. Despawns existing shape entities, loads
-/// the scene from disk, and spawns new shape entities.
-#[allow(clippy::too_many_arguments)]
-pub fn on_load_scene(
-    trigger: On<LoadScene>,
+/// Observer for `SceneLoadedEvent`. Handles UI-level synchronization after a
+/// scene has been loaded: updates the scene name label and pushes the new
+/// `SimParams` values into the slider widgets so the UI reflects them.
+pub fn on_scene_loaded(
+    trigger: On<SceneLoadedEvent>,
     mut commands: Commands,
-    mut sim_state: ResMut<SimState>,
-    mut params: ResMut<SimParams>,
-    manifest: Res<SceneManifest>,
-    windows: Query<&Window>,
+    params: Res<SimParams>,
     mut q_name: Query<&mut Text, With<SceneNameLabel>>,
-    existing_shapes: Query<Entity, With<SimShapeData>>,
     slider_entities: ParamSliderEntities,
 ) {
-    let idx = trigger.event().0;
-    if idx >= manifest.0.len() {
-        return;
-    }
-    sim_state.scene_index = idx;
-    let entry = &manifest.0[idx];
-    let Some(scene_file) = load_scene(&entry.scene) else {
-        return;
-    };
-    let Ok(window) = windows.single() else {
-        return;
-    };
-
-    // Reset params to defaults, then apply scene-specific overrides.
-    *params = SimParams::default();
-
-    // Despawn old shape entities
-    for entity in existing_shapes.iter() {
-        commands.entity(entity).despawn();
-    }
-
-    let new_shapes = apply_scene(
-        &scene_file,
-        &mut sim_state,
-        &mut params,
-        window.width(),
-        window.height(),
-    );
-
-    // Spawn new shape entities
-    for shape_data in new_shapes {
-        commands.spawn(shape_data);
-    }
-
-    // Push the new param values into the slider components so sync_params
-    // doesn't immediately overwrite them with stale slider values.
-    push_params_to_sliders(&mut commands, &params, &slider_entities);
-
     if let Ok(mut text) = q_name.single_mut() {
-        text.0 = entry.name.clone();
+        text.0 = trigger.event().name.clone();
     }
-
-    commands.trigger(ResetSimulation);
+    push_params_to_sliders(&mut commands, &params, &slider_entities);
 }
 
 /// SystemParam bundling all sliders that drive SimParams.
@@ -931,9 +885,9 @@ pub fn update_shape_info(
 ) {
     let info_text = if let Some(entity) = interaction.selected {
         if let Ok(shape) = shapes.get(entity) {
-            let shape_type = ShapeType::from_u32(shape.shape_type).label();
-            let func = ShapeFunction::from_u32(shape.function).label();
-            let mat = MaterialType::from_u32(shape.emit_material).label();
+            let shape_type = shape.shape_type.label();
+            let func = shape.function.label();
+            let mat = shape.emit_material.label();
 
             // Update button labels
             if let Ok(children) = q_type_btn.single() {
@@ -1006,7 +960,7 @@ pub fn sync_shape_sliders(
     if selection_changed {
         // Push shape values to sliders when selection changes
         if let Ok(shape) = shapes.get(entity) {
-            let is_circle = ShapeType::from_u32(shape.shape_type).is_circle();
+            let is_circle = shape.shape_type.is_circle();
             if let Ok((e, _)) = q_size_x.single() {
                 let val = if is_circle {
                     shape.radius
@@ -1033,7 +987,7 @@ pub fn sync_shape_sliders(
     } else {
         // Pull slider values into shape
         if let Ok(mut shape) = shapes.get_mut(entity) {
-            let is_circle = ShapeType::from_u32(shape.shape_type).is_circle();
+            let is_circle = shape.shape_type.is_circle();
             if let Ok((_, v)) = q_size_x.single() {
                 if is_circle {
                     shape.radius = v.0;
@@ -1135,17 +1089,21 @@ fn save_scene_to_file(
 
 /// Update stats label
 pub fn update_stats(
-    sim_state: Res<SimState>,
+    params: Res<SimParams>,
     particle_count: Res<ParticleCount>,
     shapes: Query<&SimShapeData>,
+    windows: Query<&Window>,
     mut q_stats: Query<&mut Text, With<GridStatsLabel>>,
 ) {
+    let Ok(window) = windows.single() else { return };
+    let gx = (window.width() / params.sim_res_divisor as f32).max(1.0) as u32;
+    let gy = (window.height() / params.sim_res_divisor as f32).max(1.0) as u32;
     if let Ok(mut text) = q_stats.single_mut() {
         let count = particle_count.get();
         text.0 = format!(
             "Grid: {}x{} | Shapes: {} | Particles: {:.1}k",
-            sim_state.grid_size[0],
-            sim_state.grid_size[1],
+            gx,
+            gy,
             shapes.iter().count(),
             count as f32 / 1000.0
         );

@@ -51,7 +51,6 @@ fn dist_to_box(point: Vec2, center: Vec2, half_size: Vec2, rotation_deg: f32) ->
 /// Draw shape outlines using gizmos.
 pub fn draw_shape_overlay(
     mut gizmos: Gizmos,
-    input: Res<InputState>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     params: Res<SimParams>,
     interaction: Res<ShapeInteraction>,
@@ -65,7 +64,8 @@ pub fn draw_shape_overlay(
     let h = window.height();
 
     // Draw mouse interaction radius circle at cursor position
-    let mouse_world = shape_to_world(input.mouse_position, w, h);
+    let cursor = window.cursor_position().unwrap_or_default();
+    let mouse_world = shape_to_world(cursor, w, h);
     let mouse_active = mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none();
     let alpha = if mouse_active { 0.5 } else { 0.15 };
     gizmos
@@ -85,8 +85,8 @@ pub fn draw_shape_overlay(
         } else if is_hovered {
             Color::WHITE.with_alpha(0.6)
         } else {
-            match ShapeFunction::from_u32(shape.function) {
-                ShapeFunction::Emit => match MaterialType::from_u32(shape.emit_material) {
+            match shape.function {
+                ShapeFunction::Emit => match shape.emit_material {
                     MaterialType::Liquid => Color::srgba(1.0, 0.3, 0.3, 0.4),
                     MaterialType::Elastic => Color::srgba(1.0, 1.0, 0.3, 0.4),
                     MaterialType::Sand => Color::srgba(1.0, 1.0, 0.3, 0.4),
@@ -101,7 +101,7 @@ pub fn draw_shape_overlay(
         let pos = shape.position;
         let world_pos = shape_to_world(pos, w, h);
 
-        if ShapeType::from_u32(shape.shape_type).is_circle() {
+        if shape.shape_type.is_circle() {
             // Circle
             gizmos.circle_2d(Isometry2d::from_translation(world_pos), shape.radius, color);
         } else {
@@ -145,7 +145,7 @@ pub fn shape_mouse_interaction(
         for (entity, shape) in shapes.iter() {
             let pos = shape.position;
 
-            let dist = if ShapeType::from_u32(shape.shape_type).is_circle() {
+            let dist = if shape.shape_type.is_circle() {
                 dist_to_circle(mouse_pos, pos, shape.radius)
             } else {
                 dist_to_box(mouse_pos, pos, shape.half_size, shape.rotation)
@@ -244,9 +244,9 @@ pub fn shape_keyboard(
             position: Vec2::new(cx, cy),
             half_size: Vec2::new(50.0, 50.0),
             rotation: 0.0,
-            shape_type: 0,    // Box
-            function: 0,      // Emitter
-            emit_material: 0, // Liquid
+            shape_type: ShapeType::Box,
+            function: ShapeFunction::Emit,
+            emit_material: MaterialType::Liquid,
             emission_rate: 2.5,
             emission_speed: 0.0,
             radius: 50.0,

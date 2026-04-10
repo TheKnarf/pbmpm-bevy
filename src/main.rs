@@ -50,13 +50,13 @@ fn main() {
         .add_plugins(PbmpmPlugin)
         .init_resource::<SimParams>()
         .init_resource::<SimState>()
-        .init_resource::<InputState>()
         .init_resource::<TimeRegulation>()
         .init_resource::<SceneManifest>()
         .init_resource::<ParticleCount>()
         .init_resource::<shape_editor::ShapeInteraction>()
         .add_observer(ui::on_scroll)
-        .add_observer(ui::on_load_scene)
+        .add_observer(scene::on_load_scene)
+        .add_observer(ui::on_scene_loaded)
         .add_systems(Startup, (setup, ui::setup_ui).chain())
         .add_systems(
             Update,
@@ -98,17 +98,13 @@ fn setup(mut commands: Commands, mut manifest: ResMut<SceneManifest>) {
 fn input_system(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window>,
-    mut input: ResMut<InputState>,
     mut params: ResMut<SimParams>,
 ) {
     let Ok(window) = windows.single() else { return };
-    input.mouse_prev_position = input.mouse_position;
-    if let Some(pos) = window.cursor_position() {
-        input.mouse_position = pos;
-    }
+    let cursor = window.cursor_position().unwrap_or_default();
 
     // Scroll wheel adjusts mouse interaction radius (only when not over UI panel)
-    let over_panel = input.mouse_position.x > window.width() - UI_PANEL_WIDTH;
+    let over_panel = cursor.x > window.width() - UI_PANEL_WIDTH;
     if scroll.delta.y != 0.0 && !over_panel {
         params.mouse_radius *= 1.01_f32.powf(scroll.delta.y);
         params.mouse_radius = params.mouse_radius.clamp(10.0, 1000.0);

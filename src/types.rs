@@ -41,6 +41,9 @@ impl MaterialType {
             Self::Visco => "Visco",
         }
     }
+    pub fn to_gpu(self) -> f32 {
+        self as u32 as f32
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -71,6 +74,9 @@ impl ShapeType {
     }
     pub fn is_circle(self) -> bool {
         matches!(self, Self::Circle)
+    }
+    pub fn to_gpu(self) -> f32 {
+        self as u32 as f32
     }
 }
 
@@ -107,6 +113,9 @@ impl ShapeFunction {
             Self::Drain => "Drain",
             Self::InitialEmit => "InitEmit",
         }
+    }
+    pub fn to_gpu(self) -> f32 {
+        self as u32 as f32
     }
 }
 
@@ -329,9 +338,9 @@ pub struct SimShapeData {
     pub position: Vec2,
     pub half_size: Vec2,
     pub rotation: f32,
-    pub shape_type: u32,
-    pub function: u32,
-    pub emit_material: u32,
+    pub shape_type: ShapeType,
+    pub function: ShapeFunction,
+    pub emit_material: MaterialType,
     pub emission_rate: f32,
     pub emission_speed: f32,
     pub radius: f32,
@@ -344,9 +353,9 @@ impl From<&SimShape> for SimShapeData {
             position: s.position.as_vec2(),
             half_size: s.half_size.as_vec2(),
             rotation: s.rotation,
-            shape_type: s.shape.as_u32(),
-            function: s.function.as_u32(),
-            emit_material: s.emit_material.as_u32(),
+            shape_type: ShapeType::from_u32(s.shape.as_u32()),
+            function: ShapeFunction::from_u32(s.function.as_u32()),
+            emit_material: MaterialType::from_u32(s.emit_material.as_u32()),
             emission_rate: s.emission_rate.as_f32(),
             emission_speed: s.emission_speed.as_f32(),
             radius: s.radius,
@@ -367,6 +376,7 @@ impl From<&SimShapeData> for SimShape {
                 y: d.half_size.y as f64,
             },
             rotation: d.rotation,
+            // Enum variants cast to i64 via their explicit discriminants.
             shape: StringOrNumber::Int(d.shape_type as i64),
             function: StringOrNumber::Int(d.function as i64),
             emit_material: StringOrNumber::Int(d.emit_material as i64),
@@ -387,33 +397,11 @@ pub struct LoadScene(pub usize);
 
 // --- Simulation State Resource ---
 
-#[derive(Resource, Debug, Clone)]
+#[derive(Resource, Debug, Clone, Default)]
 pub struct SimState {
     pub is_paused: bool,
     pub substep_index: u32,
-    pub grid_size: [u32; 2],
-    pub resolution: [f32; 2],
     pub scene_index: usize,
-}
-
-impl Default for SimState {
-    fn default() -> Self {
-        Self {
-            is_paused: false,
-            substep_index: 0,
-            grid_size: [128, 72],
-            resolution: [1024.0, 576.0],
-            scene_index: 0,
-        }
-    }
-}
-
-// --- Input State ---
-
-#[derive(Resource, Debug, Clone, Default)]
-pub struct InputState {
-    pub mouse_position: Vec2,
-    pub mouse_prev_position: Vec2,
 }
 
 /// Shared particle count for readback from GPU to CPU.

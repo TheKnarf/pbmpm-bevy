@@ -57,7 +57,6 @@ struct ExtractedSimDataSource(ExtractedSimData);
 fn prepare_extracted_data(
     params: Res<SimParams>,
     mut sim_state: ResMut<SimState>,
-    input: Res<InputState>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     interaction: Res<crate::shape_editor::ShapeInteraction>,
     particle_count: Res<ParticleCount>,
@@ -67,6 +66,7 @@ fn prepare_extracted_data(
     windows: Query<&Window>,
     mut source: ResMut<ExtractedSimDataSource>,
     shape_query: Query<&SimShapeData>,
+    mut prev_cursor: Local<Option<Vec2>>,
 ) {
     let Ok(window) = windows.single() else {
         return;
@@ -74,12 +74,12 @@ fn prepare_extracted_data(
     let res_w = window.width();
     let res_h = window.height();
 
-    // Update grid size based on current resolution and divisor
-    sim_state.grid_size = [
+    // Compute grid size from current window resolution.
+    let grid_size = [
         (res_w / params.sim_res_divisor as f32).max(1.0) as u32,
         (res_h / params.sim_res_divisor as f32).max(1.0) as u32,
     ];
-    sim_state.resolution = [res_w, res_h];
+    let resolution = [res_w, res_h];
 
     let do_reset = reset_pending.0;
 
@@ -103,55 +103,43 @@ fn prepare_extracted_data(
     let gpu_shapes: Vec<SimShapeGpu> = shape_query
         .iter()
         .map(|s| {
-            let mut pos = [
+            let pos = [
                 s.position.x * render_to_sim_scale,
-                s.position.y * render_to_sim_scale,
+                grid_size[1] as f32 - s.position.y * render_to_sim_scale, // Flip Y
             ];
-            // Flip Y
-            pos[1] = sim_state.grid_size[1] as f32 - pos[1];
-
-            let shape_type = s.shape_type as f32;
-            if s.shape_type == 1 {
-                // Circle
-                SimShapeGpu {
-                    position: pos,
-                    half_size: [0.0, 0.0],
-                    radius: s.radius * render_to_sim_scale,
-                    rotation: s.rotation,
-                    shape_type,
-                    functionality: s.function as f32,
-                    emit_material: s.emit_material as f32,
-                    emission_rate: s.emission_rate,
-                    emission_speed: s.emission_speed,
-                    padding: 0.0,
-                }
-            } else {
-                // Box
-                let hs = s.half_size * render_to_sim_scale;
-                SimShapeGpu {
-                    position: pos,
-                    half_size: [hs.x, hs.y],
-                    radius: 0.0,
-                    rotation: s.rotation,
-                    shape_type,
-                    functionality: s.function as f32,
-                    emit_material: s.emit_material as f32,
-                    emission_rate: s.emission_rate,
-                    emission_speed: s.emission_speed,
-                    padding: 0.0,
-                }
+            let is_circle = s.shape_type.is_circle();
+            let hs = s.half_size * render_to_sim_scale;
+            SimShapeGpu {
+                position: pos,
+                half_size: if is_circle { [0.0, 0.0] } else { [hs.x, hs.y] },
+                radius: if is_circle {
+                    s.radius * render_to_sim_scale
+                } else {
+                    0.0
+                },
+                rotation: s.rotation,
+                shape_type: s.shape_type.to_gpu(),
+                functionality: s.function.to_gpu(),
+                emit_material: s.emit_material.to_gpu(),
+                emission_rate: s.emission_rate,
+                emission_speed: s.emission_speed,
+                padding: 0.0,
             }
         })
         .collect();
 
-    // Mouse position in sim space
+    // Mouse position in sim space (track prev cursor in a Local for velocity).
+    let cursor = window.cursor_position().unwrap_or_default();
+    let prev = prev_cursor.unwrap_or(cursor);
+    *prev_cursor = Some(cursor);
+
     let mouse_pos_sim = [
-        sim_state.grid_size[0] as f32 * (input.mouse_position.x / res_w),
-        sim_state.grid_size[1] as f32 * (1.0 - input.mouse_position.y / res_h),
+        grid_size[0] as f32 * (cursor.x / res_w),
+        grid_size[1] as f32 * (1.0 - cursor.y / res_h),
     ];
     let prev_pos_sim = [
-        sim_state.grid_size[0] as f32 * (input.mouse_prev_position.x / res_w),
-        sim_state.grid_size[1] as f32 * (1.0 - input.mouse_prev_position.y / res_h),
+        grid_size[0] as f32 * (prev.x / res_w),
+        grid_size[1] as f32 * (1.0 - prev.y / res_h),
     ];
     let dt = time_reg.last_render_timestep_secs() as f32;
     let mouse_vel = if dt > 0.0 {
@@ -163,14 +151,14 @@ fn prepare_extracted_data(
         [0.0, 0.0]
     };
 
-    let bukkit_count_x = (sim_state.grid_size[0] as f32 / BUKKIT_SIZE as f32).ceil() as u32;
-    let bukkit_count_y = (sim_state.grid_size[1] as f32 / BUKKIT_SIZE as f32).ceil() as u32;
+    let bukkit_count_x = (grid_size[0] as f32 / BUKKIT_SIZE as f32).ceil() as u32;
+    let bukkit_count_y = (grid_size[1] as f32 / BUKKIT_SIZE as f32).ceil() as u32;
 
     source.0 = ExtractedSimData {
         params: params.clone(),
         shapes: gpu_shapes,
-        grid_size: sim_state.grid_size,
-        resolution: sim_state.resolution,
+        grid_size,
+        resolution,
         do_reset,
         is_paused: sim_state.is_paused,
         substep_count,
