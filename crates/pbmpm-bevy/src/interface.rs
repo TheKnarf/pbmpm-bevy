@@ -33,7 +33,9 @@ impl InteractionMode {
 /// frame from whatever input source it likes (mouse, gamepad, AI, scripted
 /// motion). The simulation reads it and applies a force.
 ///
-/// All vectors and the radius are in **simulation grid coordinates**.
+/// `position`, `velocity`, and `radius` are in **Bevy 2D world space**
+/// (origin at viewport center, Y up, units = pixels at zoom 1). The same
+/// space you'd use for a Bevy `Sprite`.
 #[derive(Resource, Default)]
 pub struct SimInteraction {
     pub active: bool,

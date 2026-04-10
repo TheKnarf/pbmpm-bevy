@@ -20,10 +20,14 @@ pub struct PbmpmPlugin;
 
 impl Plugin for PbmpmPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ExtractedSimDataSource>();
-        app.init_resource::<ResetPending>();
+        app.init_resource::<SimParams>();
+        app.init_resource::<SimState>();
+        app.init_resource::<TimeRegulation>();
+        app.init_resource::<ParticleCount>();
         app.init_resource::<SimInteraction>();
         app.init_resource::<SimViewport>();
+        app.init_resource::<ExtractedSimDataSource>();
+        app.init_resource::<ResetPending>();
         app.add_observer(on_reset_requested);
 
         app.add_systems(PostUpdate, prepare_extracted_data);
@@ -94,19 +98,24 @@ fn prepare_extracted_data(
     );
 
     let render_to_sim_scale = 1.0 / params.sim_res_divisor as f32;
+    let half_viewport = Vec2::new(res_w * 0.5, res_h * 0.5);
+
+    // Convert a world-space position (Bevy convention: origin center, Y up,
+    // units = pixels at zoom 1) into sim grid coordinates (origin bottom-left,
+    // Y up, units = grid cells).
+    let world_to_sim = |world: Vec2| -> [f32; 2] {
+        let pixel = world + half_viewport;
+        [pixel.x * render_to_sim_scale, pixel.y * render_to_sim_scale]
+    };
 
     // Convert shapes to GPU format
     let gpu_shapes: Vec<SimShapeGpu> = shape_query
         .iter()
         .map(|s| {
-            let pos = [
-                s.position.x * render_to_sim_scale,
-                grid_size[1] as f32 - s.position.y * render_to_sim_scale, // Flip Y
-            ];
             let is_circle = s.shape_type.is_circle();
             let hs = s.half_size * render_to_sim_scale;
             SimShapeGpu {
-                position: pos,
+                position: world_to_sim(s.position),
                 half_size: if is_circle { [0.0, 0.0] } else { [hs.x, hs.y] },
                 radius: if is_circle {
                     s.radius * render_to_sim_scale
@@ -139,9 +148,9 @@ fn prepare_extracted_data(
         interaction: SimInteractionSnapshot {
             active: interaction.active,
             mode: interaction.mode,
-            position: interaction.position.to_array(),
-            velocity: interaction.velocity.to_array(),
-            radius: interaction.radius,
+            position: world_to_sim(interaction.position),
+            velocity: (interaction.velocity * render_to_sim_scale).to_array(),
+            radius: interaction.radius * render_to_sim_scale,
         },
         bukkit_count_x,
         bukkit_count_y,

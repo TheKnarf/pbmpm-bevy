@@ -81,10 +81,15 @@ pub fn apply_scene(
     let height_scale = res_h / scene_height;
     let scale_scale = (width_scale * height_scale).sqrt();
 
+    // Original PB-MPM scenes use HTML canvas conventions: top-left origin,
+    // Y down. Convert to Bevy 2D world space: center origin, Y up.
+    let half_w = res_w * 0.5;
+    let half_h = res_h * 0.5;
+
     let mut shape_data_list = Vec::new();
     for mut shape in scene.shapes.clone() {
-        shape.position.x *= width_scale as f64;
-        shape.position.y *= height_scale as f64;
+        shape.position.x = shape.position.x * width_scale as f64 - half_w as f64;
+        shape.position.y = half_h as f64 - shape.position.y * height_scale as f64;
         shape.half_size.x *= scale_scale as f64;
         shape.half_size.y *= scale_scale as f64;
         shape.radius *= scale_scale;

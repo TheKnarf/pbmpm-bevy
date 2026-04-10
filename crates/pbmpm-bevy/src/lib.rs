@@ -15,10 +15,6 @@
 //!     App::new()
 //!         .add_plugins(DefaultPlugins)
 //!         .add_plugins(PbmpmPlugin)
-//!         .init_resource::<SimParams>()
-//!         .init_resource::<SimState>()
-//!         .init_resource::<TimeRegulation>()
-//!         .init_resource::<ParticleCount>()
 //!         .add_systems(Startup, setup)
 //!         .add_systems(Update, drive_sim)
 //!         .run();
@@ -27,10 +23,11 @@
 //! fn setup(mut commands: Commands) {
 //!     commands.spawn(Camera2d);
 //!
-//!     // Spawn an emitter shape.
+//!     // Spawn an emitter shape near the top of the viewport.
+//!     // Positions are in Bevy 2D world space — same convention as a Sprite.
 //!     commands.spawn(SimShapeData {
-//!         position: Vec2::new(64.0, 32.0),
-//!         radius: 6.0,
+//!         position: Vec2::new(0.0, 200.0),
+//!         radius: 40.0,
 //!         shape_type: ShapeType::Circle,
 //!         function: ShapeFunction::Emit,
 //!         emit_material: MaterialType::Liquid,
@@ -50,10 +47,11 @@
 //!     viewport.resolution = Vec2::new(window.width(), window.height());
 //!
 //!     // Drive interaction from any input source — keyboard, gamepad,
-//!     // AI, scripted motion. Coordinates are in **sim grid space**.
+//!     // AI, scripted motion. Position/velocity/radius are in Bevy world
+//!     // space (origin at viewport center, Y up, pixels at zoom 1).
 //!     interaction.active = false; // set true to apply force
-//!     interaction.position = Vec2::new(64.0, 64.0);
-//!     interaction.radius = 12.0;
+//!     interaction.position = Vec2::ZERO;
+//!     interaction.radius = 100.0;
 //!     interaction.mode = InteractionMode::Grab;
 //! }
 //! ```

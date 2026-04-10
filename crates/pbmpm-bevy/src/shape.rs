@@ -115,7 +115,10 @@ impl ShapeFunction {
 /// A simulation shape attached to an entity. Can act as a particle source,
 /// collider, drain, or initial emitter depending on `function`.
 ///
-/// All positions and sizes are in **simulation grid coordinates**.
+/// `position`, `half_size`, and `radius` are in **Bevy 2D world space**:
+/// origin at the viewport center, Y up, units = pixels at zoom 1. A shape
+/// at `Vec2::ZERO` is at the center of the simulation viewport, exactly
+/// like a `Sprite` with default `Transform`.
 #[derive(Component, Debug, Clone, Default)]
 pub struct SimShapeData {
     pub position: Vec2,

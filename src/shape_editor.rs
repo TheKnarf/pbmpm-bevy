@@ -17,10 +17,10 @@ pub struct DragState {
     pub shape_start_pos: Vec2,
 }
 
-/// Convert shape pixel-space position (origin top-left, Y down) to Bevy world-space
-/// (origin center, Y up) for gizmo drawing.
-fn shape_to_world(pos: Vec2, window_w: f32, window_h: f32) -> Vec2 {
-    Vec2::new(pos.x - window_w / 2.0, window_h / 2.0 - pos.y)
+/// Convert a screen-space cursor position (origin top-left, Y down) to
+/// Bevy 2D world space (origin center, Y up).
+fn cursor_to_world(cursor: Vec2, window_w: f32, window_h: f32) -> Vec2 {
+    Vec2::new(cursor.x - window_w / 2.0, window_h / 2.0 - cursor.y)
 }
 
 /// Distance from a point to a circle border.
@@ -28,15 +28,17 @@ fn dist_to_circle(point: Vec2, center: Vec2, radius: f32) -> f32 {
     ((point - center).length() - radius).abs()
 }
 
-/// Distance from a point to a box border (with rotation in degrees).
+/// Distance from a point to a box border. Rotation matches the shader's
+/// convention (positive = visually clockwise in Y-up world space).
 fn dist_to_box(point: Vec2, center: Vec2, half_size: Vec2, rotation_deg: f32) -> f32 {
     let rot_rad = rotation_deg.to_radians();
     let offset = point - center;
     let cos_r = rot_rad.cos();
     let sin_r = rot_rad.sin();
+    // local = R(rotation) * offset, matching SimShape::collide() in WGSL.
     let local = Vec2::new(
-        offset.x * cos_r + offset.y * sin_r,
-        -offset.x * sin_r + offset.y * cos_r,
+        offset.x * cos_r - offset.y * sin_r,
+        offset.x * sin_r + offset.y * cos_r,
     );
     let d = local.abs() - half_size;
     let outside_dist = d.max(Vec2::ZERO).length();
@@ -61,7 +63,7 @@ pub fn draw_shape_overlay(
 
     // Draw mouse interaction radius circle at cursor position
     let cursor = window.cursor_position().unwrap_or_default();
-    let mouse_world = shape_to_world(cursor, w, h);
+    let mouse_world = cursor_to_world(cursor, w, h);
     let mouse_active = mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none();
     let alpha = if mouse_active { 0.5 } else { 0.15 };
     gizmos
@@ -94,18 +96,18 @@ pub fn draw_shape_overlay(
             }
         };
 
-        let pos = shape.position;
-        let world_pos = shape_to_world(pos, w, h);
-
         if shape.shape_type.is_circle() {
-            // Circle
-            gizmos.circle_2d(Isometry2d::from_translation(world_pos), shape.radius, color);
+            gizmos.circle_2d(
+                Isometry2d::from_translation(shape.position),
+                shape.radius,
+                color,
+            );
         } else {
-            // Box
-            let hs = shape.half_size;
-            let rot_rad = shape.rotation.to_radians();
-            let iso = Isometry2d::new(world_pos, Rot2::radians(-rot_rad)); // negate for Y-flip
-            gizmos.rect_2d(iso, hs * 2.0, color);
+            // The shader treats positive rotation as visually clockwise
+            // (HTML canvas convention). Negate for Bevy's CCW-positive Rot2.
+            let rot_rad = -shape.rotation.to_radians();
+            let iso = Isometry2d::new(shape.position, Rot2::radians(rot_rad));
+            gizmos.rect_2d(iso, shape.half_size * 2.0, color);
         }
     }
 }
@@ -130,7 +132,7 @@ pub fn shape_mouse_interaction(
         return;
     }
 
-    let mouse_pos = cursor;
+    let mouse_world = cursor_to_world(cursor, window.width(), window.height());
     let selection_range = 20.0;
 
     // Hover detection
@@ -139,12 +141,10 @@ pub fn shape_mouse_interaction(
         let mut best_entity = None;
 
         for (entity, shape) in shapes.iter() {
-            let pos = shape.position;
-
             let dist = if shape.shape_type.is_circle() {
-                dist_to_circle(mouse_pos, pos, shape.radius)
+                dist_to_circle(mouse_world, shape.position, shape.radius)
             } else {
-                dist_to_box(mouse_pos, pos, shape.half_size, shape.rotation)
+                dist_to_box(mouse_world, shape.position, shape.half_size, shape.rotation)
             };
 
             if dist < selection_range && dist < best_dist {
@@ -162,12 +162,12 @@ pub fn shape_mouse_interaction(
             interaction.selected = Some(hovered);
             if let Ok((_, shape)) = shapes.get(hovered) {
                 interaction.dragging = Some(DragState {
-                    mouse_start: mouse_pos,
+                    mouse_start: mouse_world,
                     shape_start_pos: shape.position,
                 });
             }
-        } else if cursor.x <= window.width() - UI_PANEL_WIDTH {
-            // Deselect when clicking empty area (but not on UI panel)
+        } else {
+            // Deselect when clicking empty canvas
             interaction.selected = None;
         }
     }
@@ -175,7 +175,7 @@ pub fn shape_mouse_interaction(
     // Dragging
     if mouse_buttons.pressed(MouseButton::Left) {
         if let (Some(entity), Some(drag)) = (interaction.selected, &interaction.dragging) {
-            let offset = mouse_pos - drag.mouse_start;
+            let offset = mouse_world - drag.mouse_start;
             let new_pos = drag.shape_start_pos + offset;
             if let Ok((_, mut shape)) = shapes.get_mut(entity) {
                 shape.position = new_pos;
@@ -194,7 +194,6 @@ pub fn shape_keyboard(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     mut interaction: ResMut<ShapeInteraction>,
-    windows: Query<&Window>,
     shapes: Query<(Entity, &SimShapeData)>,
 ) {
     // Delete selected shape
@@ -228,23 +227,19 @@ pub fn shape_keyboard(
         }
     }
 
-    // New shape (Ctrl+N)
+    // New shape (Ctrl+N) — spawned at world origin (viewport center)
     if keys.just_pressed(KeyCode::KeyN)
         && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight))
     {
-        let Ok(window) = windows.single() else {
-            return;
-        };
         let new_shape = SimShapeData {
-            position: Vec2::new(window.width() / 2.0, window.height() / 2.0),
+            position: Vec2::ZERO,
             half_size: Vec2::new(50.0, 50.0),
-            rotation: 0.0,
             shape_type: ShapeType::Box,
             function: ShapeFunction::Emit,
             emit_material: MaterialType::Liquid,
             emission_rate: 2.5,
-            emission_speed: 0.0,
             radius: 50.0,
+            ..default()
         };
         spawn_and_select(&mut commands, &mut interaction, new_shape);
     }

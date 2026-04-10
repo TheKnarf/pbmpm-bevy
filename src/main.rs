@@ -47,11 +47,7 @@ fn main() {
             bevy::feathers::dark_theme::create_dark_theme(),
         ))
         .add_plugins(PbmpmPlugin)
-        .init_resource::<SimParams>()
-        .init_resource::<SimState>()
-        .init_resource::<TimeRegulation>()
         .init_resource::<SceneManifest>()
-        .init_resource::<ParticleCount>()
         .init_resource::<MouseConfig>()
         .init_resource::<shape_editor::ShapeInteraction>()
         .add_observer(ui::on_scroll)

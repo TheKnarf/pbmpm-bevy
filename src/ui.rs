@@ -1047,7 +1047,20 @@ fn save_scene_to_file(params: &SimParams, shapes: &Query<&SimShapeData>, width: 
     save_if_changed!("plasticity", plasticity, "range");
     save_if_changed!("borderFriction", border_friction, "range");
 
-    let sim_shapes: Vec<SimShape> = shapes.iter().map(SimShape::from).collect();
+    // Convert shapes from Bevy world space (center, Y up) back into the
+    // JSON convention (top-left origin, Y down) so saved scenes round-trip
+    // through the loader.
+    let half_w = (width * 0.5) as f64;
+    let half_h = (height * 0.5) as f64;
+    let sim_shapes: Vec<SimShape> = shapes
+        .iter()
+        .map(|s| {
+            let mut shape: SimShape = s.into();
+            shape.position.x += half_w;
+            shape.position.y = half_h - shape.position.y;
+            shape
+        })
+        .collect();
 
     let scene = SavedScene {
         version: 2,
