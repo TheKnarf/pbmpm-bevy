@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -17,11 +16,62 @@ pub enum MaterialType {
     Visco = 3,
 }
 
+impl MaterialType {
+    pub fn from_u32(v: u32) -> Self {
+        match v {
+            1 => Self::Elastic,
+            2 => Self::Sand,
+            3 => Self::Visco,
+            _ => Self::Liquid,
+        }
+    }
+    pub fn cycle_next(self) -> Self {
+        match self {
+            Self::Liquid => Self::Elastic,
+            Self::Elastic => Self::Sand,
+            Self::Sand => Self::Visco,
+            Self::Visco => Self::Liquid,
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Liquid => "Liquid",
+            Self::Elastic => "Elastic",
+            Self::Sand => "Sand",
+            Self::Visco => "Visco",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ShapeType {
     #[default]
     Box = 0,
     Circle = 1,
+}
+
+impl ShapeType {
+    pub fn from_u32(v: u32) -> Self {
+        match v {
+            1 => Self::Circle,
+            _ => Self::Box,
+        }
+    }
+    pub fn cycle_next(self) -> Self {
+        match self {
+            Self::Box => Self::Circle,
+            Self::Circle => Self::Box,
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Box => "Box",
+            Self::Circle => "Circle",
+        }
+    }
+    pub fn is_circle(self) -> bool {
+        matches!(self, Self::Circle)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -31,6 +81,33 @@ pub enum ShapeFunction {
     Collider = 1,
     Drain = 2,
     InitialEmit = 3,
+}
+
+impl ShapeFunction {
+    pub fn from_u32(v: u32) -> Self {
+        match v {
+            1 => Self::Collider,
+            2 => Self::Drain,
+            3 => Self::InitialEmit,
+            _ => Self::Emit,
+        }
+    }
+    pub fn cycle_next(self) -> Self {
+        match self {
+            Self::Emit => Self::Collider,
+            Self::Collider => Self::Drain,
+            Self::Drain => Self::InitialEmit,
+            Self::InitialEmit => Self::Emit,
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Emit => "Emit",
+            Self::Collider => "Collider",
+            Self::Drain => "Drain",
+            Self::InitialEmit => "InitEmit",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -352,13 +429,14 @@ impl ParticleCount {
     }
 }
 
-// Dispatch sizes
-pub const PARTICLE_DISPATCH_SIZE: u32 = 64;
+// Dispatch sizes (must match WGSL constants in shaders/common.wgsl)
 pub const GRID_DISPATCH_SIZE: u32 = 8;
 pub const BUKKIT_SIZE: u32 = 6;
 pub const MAX_PARTICLE_COUNT: u32 = 1_000_000;
 pub const PARTICLE_FLOAT_COUNT: u32 = 24; // 96 bytes / 4
-pub const GUARDIAN_SIZE: u32 = 3;
+
+/// Width of the right-side UI panel in pixels.
+pub const UI_PANEL_WIDTH: f32 = 310.0;
 
 pub fn div_up(a: u32, b: u32) -> u32 {
     a.div_ceil(b)

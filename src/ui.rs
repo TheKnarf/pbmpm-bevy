@@ -84,7 +84,7 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
             position_type: PositionType::Absolute,
             right: Val::Px(0.0),
             top: Val::Px(0.0),
-            width: Val::Px(310.0),
+            width: Val::Px(UI_PANEL_WIDTH),
             height: Val::Percent(100.0),
             flex_direction: FlexDirection::Column,
             padding: UiRect::all(Val::Px(8.0)),
@@ -260,10 +260,9 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                                 q: Query<&Children, With<ShapeTypeButton>>, mut qt: Query<&mut Text>| {
                             if let Some(entity) = interaction.selected {
                                 if let Ok(mut shape) = shapes.get_mut(entity) {
-                                    let next = if shape.shape_type == 0 { 1 } else { 0 };
-                                    shape.shape_type = next;
-                                    let label = if next == 0 { "Box" } else { "Circle" };
-                                    update_btn_text(ev.event_target(), &q, &mut qt, label);
+                                    let next = ShapeType::from_u32(shape.shape_type).cycle_next();
+                                    shape.shape_type = next as u32;
+                                    update_btn_text(ev.event_target(), &q, &mut qt, next.label());
                                 }
                             }
                         }),
@@ -275,10 +274,9 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                                 q: Query<&Children, With<ShapeFunctionButton>>, mut qt: Query<&mut Text>| {
                             if let Some(entity) = interaction.selected {
                                 if let Ok(mut shape) = shapes.get_mut(entity) {
-                                    let next = (shape.function + 1) % 4;
-                                    shape.function = next;
-                                    let label = match next { 0 => "Emit", 1 => "Collider", 2 => "Drain", _ => "InitEmit" };
-                                    update_btn_text(ev.event_target(), &q, &mut qt, label);
+                                    let next = ShapeFunction::from_u32(shape.function).cycle_next();
+                                    shape.function = next as u32;
+                                    update_btn_text(ev.event_target(), &q, &mut qt, next.label());
                                 }
                             }
                         }),
@@ -290,10 +288,9 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                                 q: Query<&Children, With<ShapeMaterialButton>>, mut qt: Query<&mut Text>| {
                             if let Some(entity) = interaction.selected {
                                 if let Ok(mut shape) = shapes.get_mut(entity) {
-                                    let next = (shape.emit_material + 1) % 4;
-                                    shape.emit_material = next;
-                                    let label = match next { 0 => "Liquid", 1 => "Elastic", 2 => "Sand", _ => "Visco" };
-                                    update_btn_text(ev.event_target(), &q, &mut qt, label);
+                                    let next = MaterialType::from_u32(shape.emit_material).cycle_next();
+                                    shape.emit_material = next as u32;
+                                    update_btn_text(ev.event_target(), &q, &mut qt, next.label());
                                 }
                             }
                         }),
@@ -498,23 +495,9 @@ pub fn update_shape_info(
 ) {
     let info_text = if let Some(entity) = interaction.selected {
         if let Ok(shape) = shapes.get(entity) {
-            let shape_type = if shape.shape_type == 0 {
-                "Box"
-            } else {
-                "Circle"
-            };
-            let func = match shape.function {
-                0 => "Emit",
-                1 => "Collider",
-                2 => "Drain",
-                _ => "InitEmit",
-            };
-            let mat = match shape.emit_material {
-                0 => "Liquid",
-                1 => "Elastic",
-                2 => "Sand",
-                _ => "Visco",
-            };
+            let shape_type = ShapeType::from_u32(shape.shape_type).label();
+            let func = ShapeFunction::from_u32(shape.function).label();
+            let mat = MaterialType::from_u32(shape.emit_material).label();
 
             // Update button labels
             if let Ok(children) = q_type_btn.single() {
@@ -587,7 +570,7 @@ pub fn sync_shape_sliders(
     if selection_changed {
         // Push shape values to sliders when selection changes
         if let Ok(shape) = shapes.get(entity) {
-            let is_circle = shape.shape_type == 1;
+            let is_circle = ShapeType::from_u32(shape.shape_type).is_circle();
             if let Ok((e, _)) = q_size_x.single() {
                 let val = if is_circle {
                     shape.radius
@@ -614,7 +597,7 @@ pub fn sync_shape_sliders(
     } else {
         // Pull slider values into shape
         if let Ok(mut shape) = shapes.get_mut(entity) {
-            let is_circle = shape.shape_type == 1;
+            let is_circle = ShapeType::from_u32(shape.shape_type).is_circle();
             if let Ok((_, v)) = q_size_x.single() {
                 if is_circle {
                     shape.radius = v.0;

@@ -83,24 +83,23 @@ pub fn draw_shape_overlay(
         } else if is_hovered {
             Color::WHITE.with_alpha(0.6)
         } else {
-            match shape.function {
-                0 => match shape.emit_material {
-                    0 => Color::srgba(1.0, 0.3, 0.3, 0.4), // Liquid emitter
-                    1 => Color::srgba(1.0, 1.0, 0.3, 0.4), // Elastic emitter
-                    2 => Color::srgba(1.0, 1.0, 0.3, 0.4), // Sand emitter
-                    _ => Color::srgba(1.0, 0.5, 1.0, 0.4), // Visco emitter
+            match ShapeFunction::from_u32(shape.function) {
+                ShapeFunction::Emit => match MaterialType::from_u32(shape.emit_material) {
+                    MaterialType::Liquid => Color::srgba(1.0, 0.3, 0.3, 0.4),
+                    MaterialType::Elastic => Color::srgba(1.0, 1.0, 0.3, 0.4),
+                    MaterialType::Sand => Color::srgba(1.0, 1.0, 0.3, 0.4),
+                    MaterialType::Visco => Color::srgba(1.0, 0.5, 1.0, 0.4),
                 },
-                1 => Color::srgba(0.5, 0.5, 0.5, 0.4), // Collider
-                2 => Color::srgba(1.0, 0.2, 0.2, 0.4), // Drain
-                3 => Color::srgba(0.0, 0.8, 0.8, 0.4), // Initial emitter
-                _ => Color::srgba(0.5, 0.5, 0.5, 0.4),
+                ShapeFunction::Collider => Color::srgba(0.5, 0.5, 0.5, 0.4),
+                ShapeFunction::Drain => Color::srgba(1.0, 0.2, 0.2, 0.4),
+                ShapeFunction::InitialEmit => Color::srgba(0.0, 0.8, 0.8, 0.4),
             }
         };
 
         let pos = shape.position;
         let world_pos = shape_to_world(pos, w, h);
 
-        if shape.shape_type == 1 {
+        if ShapeType::from_u32(shape.shape_type).is_circle() {
             // Circle
             gizmos.circle_2d(Isometry2d::from_translation(world_pos), shape.radius, color);
         } else {
@@ -127,8 +126,8 @@ pub fn shape_mouse_interaction(
         return;
     };
 
-    // Don't interact if cursor is over the UI panel (right 310px)
-    if cursor.x > window.width() - 310.0 {
+    // Don't interact if cursor is over the UI panel
+    if cursor.x > window.width() - UI_PANEL_WIDTH {
         interaction.hovered = None;
         return;
     }
@@ -144,7 +143,7 @@ pub fn shape_mouse_interaction(
         for (entity, shape) in shapes.iter() {
             let pos = shape.position;
 
-            let dist = if shape.shape_type == 1 {
+            let dist = if ShapeType::from_u32(shape.shape_type).is_circle() {
                 dist_to_circle(mouse_pos, pos, shape.radius)
             } else {
                 dist_to_box(mouse_pos, pos, shape.half_size, shape.rotation)
@@ -169,7 +168,7 @@ pub fn shape_mouse_interaction(
                     shape_start_pos: shape.position,
                 });
             }
-        } else if cursor.x <= window.width() - 310.0 {
+        } else if cursor.x <= window.width() - UI_PANEL_WIDTH {
             // Deselect when clicking empty area (but not on UI panel)
             interaction.selected = None;
         }

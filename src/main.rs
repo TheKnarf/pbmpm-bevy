@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod scene;
 mod shape_editor;
 mod simulation;
@@ -132,7 +130,7 @@ fn input_system(
     input.mouse_down = mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none();
 
     // Scroll wheel adjusts mouse interaction radius (only when not over UI panel)
-    let over_panel = input.mouse_position.x > window.width() - 310.0;
+    let over_panel = input.mouse_position.x > window.width() - UI_PANEL_WIDTH;
     if scroll.delta.y != 0.0 && !over_panel {
         params.mouse_radius *= 1.01_f32.powf(scroll.delta.y);
         params.mouse_radius = params.mouse_radius.clamp(10.0, 1000.0);
