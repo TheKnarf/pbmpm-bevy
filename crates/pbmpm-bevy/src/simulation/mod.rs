@@ -6,8 +6,7 @@ use bevy::prelude::*;
 use bevy::render::render_graph::{RenderGraph, RenderLabel};
 use bevy::render::{Extract, RenderApp};
 
-use crate::time_regulation::TimeRegulation;
-use crate::types::*;
+use crate::*;
 use node::*;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
@@ -23,6 +22,8 @@ impl Plugin for PbmpmPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ExtractedSimDataSource>();
         app.init_resource::<ResetPending>();
+        app.init_resource::<SimInteraction>();
+        app.init_resource::<SimViewport>();
         app.add_observer(on_reset_requested);
 
         app.add_systems(PostUpdate, prepare_extracted_data);
@@ -57,24 +58,19 @@ struct ExtractedSimDataSource(ExtractedSimData);
 fn prepare_extracted_data(
     params: Res<SimParams>,
     mut sim_state: ResMut<SimState>,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    interaction: Res<crate::shape_editor::ShapeInteraction>,
+    interaction: Res<SimInteraction>,
+    viewport: Res<SimViewport>,
     particle_count: Res<ParticleCount>,
     mut reset_pending: ResMut<ResetPending>,
     mut time_reg: ResMut<TimeRegulation>,
     time: Res<Time>,
-    windows: Query<&Window>,
     mut source: ResMut<ExtractedSimDataSource>,
     shape_query: Query<&SimShapeData>,
-    mut prev_cursor: Local<Option<Vec2>>,
 ) {
-    let Ok(window) = windows.single() else {
-        return;
-    };
-    let res_w = window.width();
-    let res_h = window.height();
+    let res_w = viewport.resolution.x.max(1.0);
+    let res_h = viewport.resolution.y.max(1.0);
 
-    // Compute grid size from current window resolution.
+    // Compute grid size from host-provided viewport.
     let grid_size = [
         (res_w / params.sim_res_divisor as f32).max(1.0) as u32,
         (res_h / params.sim_res_divisor as f32).max(1.0) as u32,
@@ -128,29 +124,6 @@ fn prepare_extracted_data(
         })
         .collect();
 
-    // Mouse position in sim space (track prev cursor in a Local for velocity).
-    let cursor = window.cursor_position().unwrap_or_default();
-    let prev = prev_cursor.unwrap_or(cursor);
-    *prev_cursor = Some(cursor);
-
-    let mouse_pos_sim = [
-        grid_size[0] as f32 * (cursor.x / res_w),
-        grid_size[1] as f32 * (1.0 - cursor.y / res_h),
-    ];
-    let prev_pos_sim = [
-        grid_size[0] as f32 * (prev.x / res_w),
-        grid_size[1] as f32 * (1.0 - prev.y / res_h),
-    ];
-    let dt = time_reg.last_render_timestep_secs() as f32;
-    let mouse_vel = if dt > 0.0 {
-        [
-            (mouse_pos_sim[0] - prev_pos_sim[0]) / dt,
-            (mouse_pos_sim[1] - prev_pos_sim[1]) / dt,
-        ]
-    } else {
-        [0.0, 0.0]
-    };
-
     let bukkit_count_x = (grid_size[0] as f32 / BUKKIT_SIZE as f32).ceil() as u32;
     let bukkit_count_y = (grid_size[1] as f32 / BUKKIT_SIZE as f32).ceil() as u32;
 
@@ -163,9 +136,13 @@ fn prepare_extracted_data(
         is_paused: sim_state.is_paused,
         substep_count,
         substep_index: sim_state.substep_index,
-        mouse_down: mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none(),
-        mouse_position: mouse_pos_sim,
-        mouse_velocity: mouse_vel,
+        interaction: SimInteractionSnapshot {
+            active: interaction.active,
+            mode: interaction.mode,
+            position: interaction.position.to_array(),
+            velocity: interaction.velocity.to_array(),
+            radius: interaction.radius,
+        },
         bukkit_count_x,
         bukkit_count_y,
         particle_count: particle_count.clone(),

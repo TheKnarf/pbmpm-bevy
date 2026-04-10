@@ -1,6 +1,12 @@
-use crate::types::*;
 use bevy::prelude::*;
 use serde::Deserialize;
+
+use crate::json_shape::SimShape;
+use pbmpm_bevy::*;
+
+/// Event fired to request loading a scene by index.
+#[derive(Event)]
+pub struct LoadScene(pub usize);
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SceneManifestEntry {

@@ -10,7 +10,7 @@ use bevy::render::view::ViewTarget;
 use bytemuck::Zeroable;
 
 use super::gpu_state::*;
-use crate::types::*;
+use crate::*;
 
 /// Extracted simulation data, copied from main world each frame.
 #[derive(Resource, Clone)]
@@ -23,12 +23,20 @@ pub struct ExtractedSimData {
     pub is_paused: bool,
     pub substep_count: u32,
     pub substep_index: u32,
-    pub mouse_down: bool,
-    pub mouse_position: [f32; 2],
-    pub mouse_velocity: [f32; 2],
+    pub interaction: SimInteractionSnapshot,
     pub bukkit_count_x: u32,
     pub bukkit_count_y: u32,
     pub particle_count: ParticleCount,
+}
+
+/// Plain-data snapshot of `SimInteraction` for passing into the render world.
+#[derive(Clone, Copy, Default)]
+pub struct SimInteractionSnapshot {
+    pub active: bool,
+    pub mode: InteractionMode,
+    pub position: [f32; 2],
+    pub velocity: [f32; 2],
+    pub radius: f32,
 }
 
 impl Default for ExtractedSimData {
@@ -42,9 +50,7 @@ impl Default for ExtractedSimData {
             is_paused: false,
             substep_count: 0,
             substep_index: 0,
-            mouse_down: false,
-            mouse_position: [0.0; 2],
-            mouse_velocity: [0.0; 2],
+            interaction: SimInteractionSnapshot::default(),
             bukkit_count_x: 0,
             bukkit_count_y: 0,
             particle_count: ParticleCount::default(),
@@ -100,7 +106,7 @@ impl PbmpmNodeInner {
         substep_idx: u32,
     ) -> SimConstantsGpu {
         let params = &data.params;
-        let mouse_activation = if data.mouse_down {
+        let interaction_strength = if data.interaction.active {
             500.0 / params.sim_rate as f32 * (data.grid_size[0] as f32 / 128.0)
         } else {
             0.0
@@ -109,10 +115,10 @@ impl PbmpmNodeInner {
         SimConstantsGpu {
             grid_size: data.grid_size,
             delta_time: 1.0 / params.sim_rate as f32,
-            mouse_activation,
-            mouse_position: data.mouse_position,
-            mouse_velocity: data.mouse_velocity,
-            mouse_function: params.mouse_function.to_gpu(),
+            interaction_strength,
+            interaction_position: data.interaction.position,
+            interaction_velocity: data.interaction.velocity,
+            interaction_mode: data.interaction.mode.to_gpu(),
             elasticity_ratio: params.elasticity_ratio,
             gravity_strength: params.gravity_strength,
             liquid_relaxation: params.liquid_relaxation,
@@ -123,7 +129,7 @@ impl PbmpmNodeInner {
             particles_per_cell_axis: params.particles_per_cell_axis,
             friction_angle: params.friction_angle,
             plasticity: params.plasticity,
-            mouse_radius: params.mouse_radius / params.sim_res_divisor as f32,
+            interaction_radius: data.interaction.radius,
             shape_count: data.shapes.len() as u32,
             sim_frame: substep_idx,
             bukkit_count: data.bukkit_count_x * data.bukkit_count_y,

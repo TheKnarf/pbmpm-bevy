@@ -1,0 +1,9 @@
+[package]
+name = "pbmpm-bevy"
+version = "0.1.0"
+edition = "2021"
+description = "Position Based Material Point Method - Bevy plugin (simulation core)"
+
+[dependencies]
+bevy = { workspace = true }
+bytemuck = { workspace = true }

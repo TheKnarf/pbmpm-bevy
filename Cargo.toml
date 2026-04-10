@@ -1,14 +1,22 @@
+[workspace]
+members = ["crates/pbmpm-bevy"]
+
+[workspace.dependencies]
+bevy = { version = "0.18", default-features = true }
+bytemuck = { version = "1", features = ["derive"] }
+
 [package]
-name = "pbmpm-bevy"
+name = "pbmpm-app"
 version = "0.1.0"
 edition = "2021"
-description = "Position Based Material Point Method - Rust/Bevy port"
+description = "Position Based Material Point Method - Rust/Bevy port (app)"
 
 [dependencies]
-bevy = { version = "0.18", features = ["dynamic_linking", "experimental_bevy_feathers", "bevy_dev_tools"] }
-bytemuck = { version = "1", features = ["derive"] }
+bevy = { workspace = true, features = ["dynamic_linking", "experimental_bevy_feathers", "bevy_dev_tools"] }
+bytemuck = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+pbmpm-bevy = { path = "crates/pbmpm-bevy" }
 
 [profile.dev]
 opt-level = 1

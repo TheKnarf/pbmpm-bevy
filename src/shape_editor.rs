@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use crate::types::*;
+use crate::mouse_input::MouseConfig;
+use crate::ui::UI_PANEL_WIDTH;
+use pbmpm_bevy::*;
 
 /// Tracks shape selection and dragging state.
 #[derive(Resource, Default)]
@@ -46,7 +48,7 @@ fn dist_to_box(point: Vec2, center: Vec2, half_size: Vec2, rotation_deg: f32) ->
 pub fn draw_shape_overlay(
     mut gizmos: Gizmos,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    params: Res<SimParams>,
+    mouse_config: Res<MouseConfig>,
     interaction: Res<ShapeInteraction>,
     windows: Query<&Window>,
     shapes: Query<(Entity, &SimShapeData)>,
@@ -65,7 +67,7 @@ pub fn draw_shape_overlay(
     gizmos
         .circle_2d(
             Isometry2d::from_translation(mouse_world),
-            params.mouse_radius,
+            mouse_config.radius_pixels,
             Color::srgba(0.5, 0.5, 0.5, alpha),
         )
         .resolution(48);

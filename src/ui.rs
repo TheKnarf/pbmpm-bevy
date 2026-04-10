@@ -11,9 +11,13 @@ use bevy::ui_widgets::{
     SliderValue,
 };
 
+use crate::json_shape::SimShape;
 use crate::scene::*;
 use crate::shape_editor::ShapeInteraction;
-use crate::types::*;
+use pbmpm_bevy::*;
+
+/// Width of the right-side UI panel in pixels.
+pub const UI_PANEL_WIDTH: f32 = 310.0;
 
 // --- Marker components ---
 #[derive(Component)]
@@ -319,16 +323,16 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                         ),
                         observe(
                             |ev: On<Activate>,
-                             mut p: ResMut<SimParams>,
+                             mut cfg: ResMut<crate::mouse_input::MouseConfig>,
                              q: Query<&Children, With<MouseFnButton>>,
                              mut qt: Query<&mut Text>| {
-                                p.mouse_function = match p.mouse_function {
-                                    MouseFunction::Grab => MouseFunction::Push,
-                                    _ => MouseFunction::Grab,
+                                cfg.mode = match cfg.mode {
+                                    InteractionMode::Grab => InteractionMode::Push,
+                                    InteractionMode::Push => InteractionMode::Grab,
                                 };
-                                let l = match p.mouse_function {
-                                    MouseFunction::Grab => "Grab",
-                                    MouseFunction::Push => "Push",
+                                let l = match cfg.mode {
+                                    InteractionMode::Grab => "Grab",
+                                    InteractionMode::Push => "Push",
                                 };
                                 update_btn_text(ev.event_target(), &q, &mut qt, l);
                             }

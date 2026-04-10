@@ -1,7 +1,7 @@
 use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
 
-use crate::types::*;
+use crate::*;
 
 /// Holds all persistent GPU buffers for the simulation.
 #[derive(Default)]

@@ -192,16 +192,16 @@ fn csMain(@builtin(local_invocation_index) indexInGroup: u32, @builtin(workgroup
                 // Integrate position
                 particle.position += particle.displacement;
 
-                // Mouse interaction
-                if (g_simConstants.mouseActivation > 0.0) {
-                    let offset = particle.position - g_simConstants.mousePosition;
+                // Host-driven interaction (push or grab)
+                if (g_simConstants.interactionStrength > 0.0) {
+                    let offset = particle.position - g_simConstants.interactionPosition;
                     let lenOffset = max(length(offset), 0.0001);
-                    if (lenOffset < g_simConstants.mouseRadius) {
+                    if (lenOffset < g_simConstants.interactionRadius) {
                         let normOffset = offset / lenOffset;
-                        if (g_simConstants.mouseFunction == MouseFunctionPush) {
-                            particle.displacement += normOffset * g_simConstants.mouseActivation;
-                        } else if (g_simConstants.mouseFunction == MouseFunctionGrab) {
-                            particle.displacement = g_simConstants.mouseVelocity * g_simConstants.deltaTime;
+                        if (g_simConstants.interactionMode == InteractionModePush) {
+                            particle.displacement += normOffset * g_simConstants.interactionStrength;
+                        } else if (g_simConstants.interactionMode == InteractionModeGrab) {
+                            particle.displacement = g_simConstants.interactionVelocity * g_simConstants.deltaTime;
                         }
                     }
                 }

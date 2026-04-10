@@ -14,8 +14,8 @@ fn divUp(threadCount: u32, divisor: u32) -> u32 {
 // --- Sim Enums ---
 const SolverTypePBMPM = 1;
 
-const MouseFunctionPush = 0.0;
-const MouseFunctionGrab = 1.0;
+const InteractionModePush = 0.0;
+const InteractionModeGrab = 1.0;
 
 const MaterialLiquid = 0.0;
 const MaterialElastic = 1.0;
@@ -42,10 +42,10 @@ const RenderModeVelocity = 2.0;
 struct SimConstants {
     gridSize: vec2u,
     deltaTime: f32,
-    mouseActivation: f32,
-    mousePosition: vec2f,
-    mouseVelocity: vec2f,
-    mouseFunction: f32,
+    interactionStrength: f32,
+    interactionPosition: vec2f,
+    interactionVelocity: vec2f,
+    interactionMode: f32,
     elasticityRatio: f32,
     gravityStrength: f32,
     liquidRelaxation: f32,
@@ -56,7 +56,7 @@ struct SimConstants {
     particlesPerCellAxis: u32,
     frictionAngle: f32,
     plasticity: f32,
-    mouseRadius: f32,
+    interactionRadius: f32,
     shapeCount: u32,
     simFrame: u32,
     bukkitCount: u32,

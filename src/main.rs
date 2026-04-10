@@ -1,8 +1,7 @@
+mod json_shape;
+mod mouse_input;
 mod scene;
 mod shape_editor;
-mod simulation;
-mod time_regulation;
-mod types;
 mod ui;
 
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
@@ -11,10 +10,10 @@ use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
+use mouse_input::MouseConfig;
+use pbmpm_bevy::*;
 use scene::*;
-use simulation::PbmpmPlugin;
-use time_regulation::TimeRegulation;
-use types::*;
+use ui::UI_PANEL_WIDTH;
 
 fn main() {
     App::new()
@@ -29,7 +28,7 @@ fn main() {
                     ..default()
                 })
                 .set(bevy::log::LogPlugin {
-                    filter: "wgpu=warn,bevy_render=info,pbmpm_bevy=info".into(),
+                    filter: "wgpu=warn,bevy_render=info,pbmpm_bevy=info,pbmpm_app=info".into(),
                     ..default()
                 }),
         )
@@ -53,6 +52,7 @@ fn main() {
         .init_resource::<TimeRegulation>()
         .init_resource::<SceneManifest>()
         .init_resource::<ParticleCount>()
+        .init_resource::<MouseConfig>()
         .init_resource::<shape_editor::ShapeInteraction>()
         .add_observer(ui::on_scroll)
         .add_observer(scene::on_load_scene)
@@ -63,6 +63,7 @@ fn main() {
             (
                 input_system,
                 keyboard_system,
+                mouse_input::drive_sim_interaction,
                 shape_editor::shape_mouse_interaction,
                 shape_editor::shape_keyboard,
                 shape_editor::draw_shape_overlay,
@@ -98,16 +99,16 @@ fn setup(mut commands: Commands, mut manifest: ResMut<SceneManifest>) {
 fn input_system(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window>,
-    mut params: ResMut<SimParams>,
+    mut mouse_config: ResMut<MouseConfig>,
 ) {
     let Ok(window) = windows.single() else { return };
     let cursor = window.cursor_position().unwrap_or_default();
 
-    // Scroll wheel adjusts mouse interaction radius (only when not over UI panel)
+    // Scroll wheel adjusts interaction radius (only when not over UI panel)
     let over_panel = cursor.x > window.width() - UI_PANEL_WIDTH;
     if scroll.delta.y != 0.0 && !over_panel {
-        params.mouse_radius *= 1.01_f32.powf(scroll.delta.y);
-        params.mouse_radius = params.mouse_radius.clamp(10.0, 1000.0);
+        mouse_config.radius_pixels =
+            (mouse_config.radius_pixels * 1.01_f32.powf(scroll.delta.y)).clamp(10.0, 1000.0);
     }
 }
 
