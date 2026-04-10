@@ -716,6 +716,93 @@ fn update_btn_text(
     }
 }
 
+/// SystemParam bundling all entity references for the param sliders, used to
+/// push current SimParams values back into the slider widgets after scene load.
+#[derive(SystemParam)]
+pub struct ParamSliderEntities<'w, 's> {
+    gravity: Query<'w, 's, Entity, With<GravitySlider>>,
+    iterations: Query<'w, 's, Entity, With<IterationSlider>>,
+    elasticity: Query<'w, 's, Entity, With<ElasticitySlider>>,
+    liq_relax: Query<'w, 's, Entity, With<LiquidRelaxSlider>>,
+    elas_relax: Query<'w, 's, Entity, With<ElasticRelaxSlider>>,
+    friction: Query<'w, 's, Entity, With<FrictionAngleSlider>>,
+    plasticity: Query<'w, 's, Entity, With<PlasticitySlider>>,
+    border_fric: Query<'w, 's, Entity, With<BorderFrictionSlider>>,
+    viscosity: Query<'w, 's, Entity, With<ViscositySlider>>,
+    ppc: Query<'w, 's, Entity, With<ParticlesPerCellSlider>>,
+    fp: Query<'w, 's, Entity, With<FpMultSlider>>,
+    grid_vol: Query<'w, 's, Entity, With<GridVolumeCheckbox>>,
+}
+
+/// Push current SimParams values into the slider widget components so the UI
+/// reflects programmatic param changes (e.g. after loading a scene).
+fn push_params_to_sliders(
+    commands: &mut Commands,
+    params: &SimParams,
+    entities: &ParamSliderEntities,
+) {
+    if let Ok(e) = entities.gravity.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.gravity_strength));
+    }
+    if let Ok(e) = entities.iterations.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.iteration_count as f32));
+    }
+    if let Ok(e) = entities.elasticity.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.elasticity_ratio));
+    }
+    if let Ok(e) = entities.liq_relax.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.liquid_relaxation));
+    }
+    if let Ok(e) = entities.elas_relax.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.elastic_relaxation));
+    }
+    if let Ok(e) = entities.friction.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.friction_angle));
+    }
+    if let Ok(e) = entities.plasticity.single() {
+        commands.entity(e).insert(SliderValue(params.plasticity));
+    }
+    if let Ok(e) = entities.border_fric.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.border_friction));
+    }
+    if let Ok(e) = entities.viscosity.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.liquid_viscosity));
+    }
+    if let Ok(e) = entities.ppc.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.particles_per_cell_axis as f32));
+    }
+    if let Ok(e) = entities.fp.single() {
+        commands
+            .entity(e)
+            .insert(SliderValue(params.fixed_point_multiplier_exponent as f32));
+    }
+    if let Ok(e) = entities.grid_vol.single() {
+        if params.use_grid_volume_for_liquid {
+            commands.entity(e).insert(Checked);
+        } else {
+            commands.entity(e).remove::<Checked>();
+        }
+    }
+}
+
 /// Observer for `LoadScene` events. Despawns existing shape entities, loads
 /// the scene from disk, and spawns new shape entities.
 #[allow(clippy::too_many_arguments)]
@@ -728,6 +815,7 @@ pub fn on_load_scene(
     windows: Query<&Window>,
     mut q_name: Query<&mut Text, With<SceneNameLabel>>,
     existing_shapes: Query<Entity, With<SimShapeData>>,
+    slider_entities: ParamSliderEntities,
 ) {
     let idx = trigger.event().0;
     if idx >= manifest.0.len() {
@@ -742,6 +830,7 @@ pub fn on_load_scene(
         return;
     };
 
+    // Reset params to defaults, then apply scene-specific overrides.
     *params = SimParams::default();
 
     // Despawn old shape entities
@@ -761,6 +850,10 @@ pub fn on_load_scene(
     for shape_data in new_shapes {
         commands.spawn(shape_data);
     }
+
+    // Push the new param values into the slider components so sync_params
+    // doesn't immediately overwrite them with stale slider values.
+    push_params_to_sliders(&mut commands, &params, &slider_entities);
 
     if let Ok(mut text) = q_name.single_mut() {
         text.0 = entry.name.clone();
