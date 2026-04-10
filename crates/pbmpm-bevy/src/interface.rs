@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 
-/// Trigger this event to request a simulation reset on the next frame.
+/// Trigger this event to clear all particles and reset the substep counter.
+///
+/// The reset takes effect on the next frame's extraction; in-flight substeps
+/// for the current frame are not cancelled.
 #[derive(Event)]
 pub struct ResetSimulation;
 
@@ -48,9 +51,10 @@ pub struct SimViewport {
     pub resolution: Vec2,
 }
 
-/// Live particle count, updated by GPU readback. Cheap to clone (Arc).
+/// Live particle count, updated by GPU readback (~once per second).
+/// Cheap to clone — internally an `Arc`.
 #[derive(Resource, Clone)]
-pub struct ParticleCount(pub Arc<AtomicU32>);
+pub struct ParticleCount(pub(crate) Arc<AtomicU32>);
 
 impl Default for ParticleCount {
     fn default() -> Self {
@@ -59,6 +63,7 @@ impl Default for ParticleCount {
 }
 
 impl ParticleCount {
+    /// Most recent particle count read back from the GPU.
     pub fn get(&self) -> u32 {
         self.0.load(Ordering::Relaxed)
     }
