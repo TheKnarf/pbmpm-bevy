@@ -381,6 +381,10 @@ impl From<&SimShapeData> for SimShape {
 #[derive(Event)]
 pub struct ResetSimulation;
 
+/// Event fired to request loading a scene by index.
+#[derive(Event)]
+pub struct LoadScene(pub usize);
+
 // --- Simulation State Resource ---
 
 #[derive(Resource, Debug, Clone)]
@@ -408,7 +412,6 @@ impl Default for SimState {
 
 #[derive(Resource, Debug, Clone, Default)]
 pub struct InputState {
-    pub mouse_down: bool,
     pub mouse_position: Vec2,
     pub mouse_prev_position: Vec2,
 }

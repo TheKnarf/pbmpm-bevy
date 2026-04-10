@@ -56,6 +56,7 @@ fn main() {
         .init_resource::<ParticleCount>()
         .init_resource::<shape_editor::ShapeInteraction>()
         .add_observer(ui::on_scroll)
+        .add_observer(ui::on_load_scene)
         .add_systems(Startup, (setup, ui::setup_ui).chain())
         .add_systems(
             Update,
@@ -76,13 +77,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut sim_state: ResMut<SimState>,
-    mut params: ResMut<SimParams>,
-    mut manifest: ResMut<SceneManifest>,
-    windows: Query<&Window>,
-) {
+fn setup(mut commands: Commands, mut manifest: ResMut<SceneManifest>) {
     commands.spawn((
         Camera2d,
         Camera {
@@ -93,41 +88,24 @@ fn setup(
     ));
 
     *manifest = SceneManifest(load_manifest());
-
-    if let Some(entry) = manifest.0.first() {
-        if let Some(scene_file) = load_scene(&entry.scene) {
-            let (w, h) = if let Ok(window) = windows.single() {
-                (window.width(), window.height())
-            } else {
-                (1280.0, 720.0)
-            };
-            let new_shapes = apply_scene(&scene_file, &mut sim_state, &mut params, w, h);
-            let shape_count = new_shapes.len();
-            for shape_data in new_shapes {
-                commands.spawn(shape_data);
-            }
-            commands.trigger(ResetSimulation);
-            info!("Loaded scene: {} ({} shapes)", entry.name, shape_count);
-        }
-    }
     info!("PB-MPM initialized with {} scenes", manifest.0.len());
+
+    if !manifest.0.is_empty() {
+        commands.trigger(LoadScene(0));
+    }
 }
 
 fn input_system(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window>,
     mut input: ResMut<InputState>,
     mut params: ResMut<SimParams>,
-    interaction: Res<shape_editor::ShapeInteraction>,
 ) {
     let Ok(window) = windows.single() else { return };
     input.mouse_prev_position = input.mouse_position;
     if let Some(pos) = window.cursor_position() {
         input.mouse_position = pos;
     }
-    // Mouse down only when not dragging a shape
-    input.mouse_down = mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none();
 
     // Scroll wheel adjusts mouse interaction radius (only when not over UI panel)
     let over_panel = input.mouse_position.x > window.width() - UI_PANEL_WIDTH;
@@ -137,16 +115,11 @@ fn input_system(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn keyboard_system(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     mut sim_state: ResMut<SimState>,
     manifest: Res<SceneManifest>,
-    mut params: ResMut<SimParams>,
-    windows: Query<&Window>,
-    mut q_name: Query<&mut Text, With<ui::SceneNameLabel>>,
-    existing_shapes: Query<Entity, With<SimShapeData>>,
 ) {
     if keys.just_pressed(KeyCode::F5) {
         commands.trigger(ResetSimulation);
@@ -161,15 +134,7 @@ fn keyboard_system(
         info!("Screenshot requested");
     }
     if keys.just_pressed(KeyCode::Tab) && !manifest.0.is_empty() {
-        sim_state.scene_index = (sim_state.scene_index + 1) % manifest.0.len();
-        ui::do_load_scene(
-            &mut commands,
-            &mut sim_state,
-            &mut params,
-            &manifest,
-            &windows,
-            &mut q_name,
-            &existing_shapes,
-        );
+        let next = (sim_state.scene_index + 1) % manifest.0.len();
+        commands.trigger(LoadScene(next));
     }
 }

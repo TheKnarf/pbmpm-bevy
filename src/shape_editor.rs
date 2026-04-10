@@ -52,6 +52,7 @@ fn dist_to_box(point: Vec2, center: Vec2, half_size: Vec2, rotation_deg: f32) ->
 pub fn draw_shape_overlay(
     mut gizmos: Gizmos,
     input: Res<InputState>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     params: Res<SimParams>,
     interaction: Res<ShapeInteraction>,
     windows: Query<&Window>,
@@ -65,7 +66,8 @@ pub fn draw_shape_overlay(
 
     // Draw mouse interaction radius circle at cursor position
     let mouse_world = shape_to_world(input.mouse_position, w, h);
-    let alpha = if input.mouse_down { 0.5 } else { 0.15 };
+    let mouse_active = mouse_buttons.pressed(MouseButton::Left) && interaction.dragging.is_none();
+    let alpha = if mouse_active { 0.5 } else { 0.15 };
     gizmos
         .circle_2d(
             Isometry2d::from_translation(mouse_world),
