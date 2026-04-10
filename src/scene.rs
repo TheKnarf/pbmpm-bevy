@@ -10,8 +10,6 @@ pub struct SceneManifestEntry {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SceneFile {
-    #[allow(dead_code)]
-    pub version: u32,
     pub resolution: [f64; 2],
     #[serde(default)]
     pub settings: Vec<SceneSetting>,
@@ -19,12 +17,9 @@ pub struct SceneFile {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct SceneSetting {
     pub name: String,
     pub value: serde_json::Value,
-    #[serde(rename = "type")]
-    pub setting_type: String,
 }
 
 pub fn load_manifest() -> Vec<SceneManifestEntry> {

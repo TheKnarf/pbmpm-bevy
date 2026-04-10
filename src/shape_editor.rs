@@ -204,10 +204,9 @@ pub fn shape_keyboard(
         }
     }
 
-    // Spawn a shape, give it a fresh id, and select it.
+    // Spawn a shape and select it.
     let spawn_and_select =
-        |commands: &mut Commands, interaction: &mut ShapeInteraction, mut shape: SimShapeData| {
-            shape.id = format!("shape{}", shapes.iter().count());
+        |commands: &mut Commands, interaction: &mut ShapeInteraction, shape: SimShapeData| {
             let entity = commands.spawn(shape).id();
             interaction.selected = Some(entity);
         };
@@ -235,7 +234,6 @@ pub fn shape_keyboard(
             return;
         };
         let new_shape = SimShapeData {
-            id: String::new(),
             position: Vec2::new(window.width() / 2.0, window.height() / 2.0),
             half_size: Vec2::new(50.0, 50.0),
             rotation: 0.0,

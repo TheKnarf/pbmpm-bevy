@@ -126,6 +126,12 @@ pub enum MouseFunction {
     Grab = 1,
 }
 
+impl MouseFunction {
+    pub fn to_gpu(self) -> f32 {
+        self as u32 as f32
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RenderMode {
     #[default]
@@ -134,11 +140,16 @@ pub enum RenderMode {
     Velocity = 2,
 }
 
+impl RenderMode {
+    pub fn to_gpu(self) -> f32 {
+        self as u32 as f32
+    }
+}
+
 // --- Simulation Shape ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimShape {
-    pub id: String,
     pub position: Vec2Json,
     #[serde(default, rename = "halfSize")]
     pub half_size: Vec2Json,
@@ -337,7 +348,6 @@ impl Default for SimParams {
 
 #[derive(Component, Debug, Clone)]
 pub struct SimShapeData {
-    pub id: String,
     pub position: Vec2,
     pub half_size: Vec2,
     pub rotation: f32,
@@ -352,7 +362,6 @@ pub struct SimShapeData {
 impl From<&SimShape> for SimShapeData {
     fn from(s: &SimShape) -> Self {
         Self {
-            id: s.id.clone(),
             position: s.position.as_vec2(),
             half_size: s.half_size.as_vec2(),
             rotation: s.rotation,
@@ -369,7 +378,6 @@ impl From<&SimShape> for SimShapeData {
 impl From<&SimShapeData> for SimShape {
     fn from(d: &SimShapeData) -> Self {
         Self {
-            id: d.id.clone(),
             position: Vec2Json {
                 x: d.position.x as f64,
                 y: d.position.y as f64,

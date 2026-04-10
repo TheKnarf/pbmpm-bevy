@@ -623,20 +623,13 @@ pub fn setup_ui(mut commands: Commands, params: Res<SimParams>, manifest: Res<Sc
                 ),
                 observe(
                     |_: On<Activate>,
-                     state: Res<SimState>,
                      params: Res<SimParams>,
                      windows: Query<&Window>,
                      shapes: Query<&SimShapeData>| {
                         let Ok(window) = windows.single() else {
                             return;
                         };
-                        save_scene_to_file(
-                            &state,
-                            &params,
-                            &shapes,
-                            window.width(),
-                            window.height(),
-                        );
+                        save_scene_to_file(&params, &shapes, window.width(), window.height());
                     },
                 ),
             ),
@@ -903,7 +896,7 @@ pub fn update_shape_info(
             set_label(q_func_btn.single(), func);
             set_label(q_mat_btn.single(), mat);
 
-            format!("Shape {} [{}] {} {}", shape.id, shape_type, func, mat)
+            format!("Shape {} [{}] {} {}", entity.index(), shape_type, func, mat)
         } else {
             "No shape selected".to_string()
         }
@@ -1004,13 +997,7 @@ pub fn sync_shape_sliders(
 }
 
 /// Save current scene to a JSON file.
-fn save_scene_to_file(
-    _state: &SimState,
-    params: &SimParams,
-    shapes: &Query<&SimShapeData>,
-    width: f32,
-    height: f32,
-) {
+fn save_scene_to_file(params: &SimParams, shapes: &Query<&SimShapeData>, width: f32, height: f32) {
     use serde::Serialize;
 
     #[derive(Serialize)]
