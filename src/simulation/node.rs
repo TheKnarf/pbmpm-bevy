@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use bevy::prelude::*;
 use bevy::render::render_graph::{Node, NodeRunError, RenderGraphContext};
 use bevy::render::render_resource::*;
-use bevy::render::renderer::{RenderContext, RenderDevice};
+use bevy::render::renderer::{RenderContext, RenderDevice, RenderQueue};
 use bevy::render::view::ViewTarget;
 
 use bytemuck::Zeroable;
@@ -199,20 +199,36 @@ impl Node for PbmpmNode {
             this.buffer_idx = 0;
         }
 
-        let state = &this.state;
+        // Get the render queue for buffer writes (avoids per-dispatch buffer allocation).
+        let queue = world.resource::<RenderQueue>();
 
-        // Build shape buffer
-        let shapes = if data.shapes.is_empty() {
+        // Ensure the persistent shape buffer is large enough and write the current shapes.
+        let shapes_owned: Vec<SimShapeGpu> = if data.shapes.is_empty() {
             vec![SimShapeGpu::zeroed()]
         } else {
             data.shapes.clone()
         };
-        let shape_buffer = device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("shapes"),
-            contents: bytemuck::cast_slice(&shapes),
-            usage: BufferUsages::STORAGE,
-        });
+        this.state.ensure_shape_buffer(
+            device,
+            shapes_owned.len() as u32,
+            std::mem::size_of::<SimShapeGpu>() as u64,
+        );
+        queue.write_buffer(this.state.shape_buf(), 0, bytemuck::cast_slice(&shapes_owned));
 
+        // Pre-allocate enough uniform buffers for this frame's substeps.
+        // Each substep needs: iteration_count (g2p2g) + 4 (emit, bukkit_count, bukkit_allocate, bukkit_insert)
+        let substep_count = if data.is_paused {
+            0
+        } else {
+            data.substep_count
+        };
+        let uniforms_per_substep = data.params.iteration_count as usize + 4;
+        let total_uniforms = (substep_count as usize * uniforms_per_substep).max(1);
+        let uniform_size = std::mem::size_of::<SimConstantsGpu>() as u64;
+        this.state.ensure_uniform_pool(device, total_uniforms, uniform_size);
+
+        let mut uniform_idx: usize = 0;
+        let state = &this.state;
         let encoder = render_context.command_encoder();
 
         // Clear grid buffers at start of frame
@@ -221,393 +237,195 @@ impl Node for PbmpmNode {
         }
 
         // Simulation substeps
-        let substep_count = if data.is_paused {
-            0
-        } else {
-            data.substep_count
-        };
         let mut substep_index = data.substep_index;
 
         for _substep in 0..substep_count {
-            for iteration in 0..data.params.iteration_count {
-                let sim_constants = this.build_sim_constants(data, iteration, substep_index);
-                let sim_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
-                    label: Some("sim_constants"),
-                    contents: bytemuck::cast_slice(&[sim_constants]),
-                    usage: BufferUsages::UNIFORM,
-                });
+            // Build the base sim constants for this substep once; only the
+            // `iteration` field varies per dispatch within the substep.
+            let mut sim_constants = this.build_sim_constants(data, 0, substep_index);
 
-                let current_grid = state.grid_buffers[this.buffer_idx as usize]
-                    .as_ref()
-                    .unwrap();
-                let next_grid = state.grid_buffers[((this.buffer_idx + 1) % 3) as usize]
-                    .as_ref()
-                    .unwrap();
-                let next_next_grid = state.grid_buffers[((this.buffer_idx + 2) % 3) as usize]
-                    .as_ref()
-                    .unwrap();
+            for iteration in 0..data.params.iteration_count {
+                sim_constants.iteration = iteration;
+                let sim_uniform = state.uniform(uniform_idx);
+                queue.write_buffer(sim_uniform, 0, bytemuck::cast_slice(&[sim_constants]));
+                uniform_idx += 1;
+
+                let current_grid = state.grid(this.buffer_idx as usize);
+                let next_grid = state.grid(((this.buffer_idx + 1) % 3) as usize);
+                let next_next_grid = state.grid(((this.buffer_idx + 2) % 3) as usize);
                 this.buffer_idx = (this.buffer_idx + 1) % 3;
 
-                // G2P2G dispatch
                 let bind_group = device.create_bind_group(
                     "g2p2g",
                     &BindGroupLayout::from(pipelines.g2p2g.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: sim_uniform.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 2,
-                            resource: current_grid.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 3,
-                            resource: next_grid.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 4,
-                            resource: next_next_grid.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 5,
-                            resource: state
-                                .bukkit_thread_data
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 6,
-                            resource: state
-                                .bukkit_particle_data
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 7,
-                            resource: shape_buffer.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 8,
-                            resource: state
-                                .particle_free_indices_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
+                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
+                        BindGroupEntry { binding: 1, resource: state.particles().as_entire_binding() },
+                        BindGroupEntry { binding: 2, resource: current_grid.as_entire_binding() },
+                        BindGroupEntry { binding: 3, resource: next_grid.as_entire_binding() },
+                        BindGroupEntry { binding: 4, resource: next_next_grid.as_entire_binding() },
+                        BindGroupEntry { binding: 5, resource: state.bukkit_thread_data_buf().as_entire_binding() },
+                        BindGroupEntry { binding: 6, resource: state.bukkit_particle_data_buf().as_entire_binding() },
+                        BindGroupEntry { binding: 7, resource: state.shape_buf().as_entire_binding() },
+                        BindGroupEntry { binding: 8, resource: state.free_indices().as_entire_binding() },
                     ],
                 );
 
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("g2p2g"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipelines.g2p2g);
-                    pass.set_bind_group(0, &bind_group, &[]);
-                    pass.dispatch_workgroups_indirect(state.bukkit_dispatch.as_ref().unwrap(), 0);
-                }
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("g2p2g"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&pipelines.g2p2g);
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.dispatch_workgroups_indirect(state.bukkit_dispatch_buf(), 0);
             }
 
-            // Emission
+            // Emission - reuses the same sim_constants (iteration is irrelevant here).
+            sim_constants.iteration = 0;
+            let emit_uniform = state.uniform(uniform_idx);
+            queue.write_buffer(emit_uniform, 0, bytemuck::cast_slice(&[sim_constants]));
+            uniform_idx += 1;
+
+            let grid = state.grid(this.buffer_idx as usize);
+
+            let emit_bg = device.create_bind_group(
+                "particle_emit",
+                &BindGroupLayout::from(pipelines.particle_emit.get_bind_group_layout(0)),
+                &[
+                    BindGroupEntry { binding: 0, resource: emit_uniform.as_entire_binding() },
+                    BindGroupEntry { binding: 1, resource: state.particle_count().as_entire_binding() },
+                    BindGroupEntry { binding: 2, resource: state.particles().as_entire_binding() },
+                    BindGroupEntry { binding: 3, resource: state.shape_buf().as_entire_binding() },
+                    BindGroupEntry { binding: 4, resource: state.free_indices().as_entire_binding() },
+                    BindGroupEntry { binding: 5, resource: grid.as_entire_binding() },
+                ],
+            );
+
+            let grid_dispatch_x = div_up(data.grid_size[0], GRID_DISPATCH_SIZE);
+            let grid_dispatch_y = div_up(data.grid_size[1], GRID_DISPATCH_SIZE);
             {
-                let sim_constants = this.build_sim_constants(data, 0, substep_index);
-                let sim_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
-                    label: Some("sim_constants_emit"),
-                    contents: bytemuck::cast_slice(&[sim_constants]),
-                    usage: BufferUsages::UNIFORM,
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("particle_emit"),
+                    timestamp_writes: None,
                 });
+                pass.set_pipeline(&pipelines.particle_emit);
+                pass.set_bind_group(0, &emit_bg, &[]);
+                pass.dispatch_workgroups(grid_dispatch_x, grid_dispatch_y, 1);
+            }
 
-                let grid = state.grid_buffers[this.buffer_idx as usize]
-                    .as_ref()
-                    .unwrap();
-
-                // Particle emit
-                let emit_bg = device.create_bind_group(
-                    "particle_emit",
-                    &BindGroupLayout::from(pipelines.particle_emit.get_bind_group_layout(0)),
-                    &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: sim_uniform.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: state
-                                .particle_count_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 2,
-                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 3,
-                            resource: shape_buffer.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 4,
-                            resource: state
-                                .particle_free_indices_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 5,
-                            resource: grid.as_entire_binding(),
-                        },
-                    ],
-                );
-
-                let grid_dispatch_x = div_up(data.grid_size[0], GRID_DISPATCH_SIZE);
-                let grid_dispatch_y = div_up(data.grid_size[1], GRID_DISPATCH_SIZE);
-
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("particle_emit"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipelines.particle_emit);
-                    pass.set_bind_group(0, &emit_bg, &[]);
-                    pass.dispatch_workgroups(grid_dispatch_x, grid_dispatch_y, 1);
-                }
-
-                // Set indirect args
-                let args_bg = device.create_bind_group(
-                    "set_indirect_args",
-                    &BindGroupLayout::from(pipelines.set_indirect_args.get_bind_group_layout(0)),
-                    &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: state
-                                .particle_count_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: state
-                                .particle_sim_dispatch_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 2,
-                            resource: state
-                                .particle_render_dispatch_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                    ],
-                );
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("set_indirect_args"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipelines.set_indirect_args);
-                    pass.set_bind_group(0, &args_bg, &[]);
-                    pass.dispatch_workgroups(1, 1, 1);
-                }
+            // set_indirect_args doesn't use sim_constants - bind directly.
+            let args_bg = device.create_bind_group(
+                "set_indirect_args",
+                &BindGroupLayout::from(pipelines.set_indirect_args.get_bind_group_layout(0)),
+                &[
+                    BindGroupEntry { binding: 0, resource: state.particle_count().as_entire_binding() },
+                    BindGroupEntry { binding: 1, resource: state.sim_dispatch().as_entire_binding() },
+                    BindGroupEntry { binding: 2, resource: state.render_dispatch().as_entire_binding() },
+                ],
+            );
+            {
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("set_indirect_args"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&pipelines.set_indirect_args);
+                pass.set_bind_group(0, &args_bg, &[]);
+                pass.dispatch_workgroups(1, 1, 1);
             }
 
             // Bukkitize particles
+            // Clear bukkit buffers
+            encoder.clear_buffer(state.bukkit_count_buf(), 0, None);
+            encoder.clear_buffer(state.bukkit_count_buf2(), 0, None);
+            encoder.clear_buffer(state.bukkit_thread_data_buf(), 0, None);
+            encoder.clear_buffer(state.bukkit_particle_data_buf(), 0, None);
+            encoder.clear_buffer(state.bukkit_particle_allocator_buf(), 0, None);
+            encoder.copy_buffer_to_buffer(
+                state.bukkit_blank_dispatch_buf(),
+                0,
+                state.bukkit_dispatch_buf(),
+                0,
+                state.bukkit_dispatch_buf().size(),
+            );
+
+            // Each bukkit dispatch needs its own uniform slot since the writes
+            // accumulate before submit.
+            let bk_count_uniform = state.uniform(uniform_idx);
+            queue.write_buffer(bk_count_uniform, 0, bytemuck::cast_slice(&[sim_constants]));
+            uniform_idx += 1;
+
+            let bk_count_bg = device.create_bind_group(
+                "bukkit_count",
+                &BindGroupLayout::from(pipelines.bukkit_count.get_bind_group_layout(0)),
+                &[
+                    BindGroupEntry { binding: 0, resource: bk_count_uniform.as_entire_binding() },
+                    BindGroupEntry { binding: 1, resource: state.particle_count().as_entire_binding() },
+                    BindGroupEntry { binding: 2, resource: state.particles().as_entire_binding() },
+                    BindGroupEntry { binding: 3, resource: state.bukkit_count_buf().as_entire_binding() },
+                ],
+            );
             {
-                let sim_constants = this.build_sim_constants(data, 0, substep_index);
-                let sim_uniform = device.create_buffer_with_data(&BufferInitDescriptor {
-                    label: Some("sim_constants_bukkit"),
-                    contents: bytemuck::cast_slice(&[sim_constants]),
-                    usage: BufferUsages::UNIFORM,
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("bukkit_count"),
+                    timestamp_writes: None,
                 });
+                pass.set_pipeline(&pipelines.bukkit_count);
+                pass.set_bind_group(0, &bk_count_bg, &[]);
+                pass.dispatch_workgroups_indirect(state.sim_dispatch(), 0);
+            }
 
-                // Clear bukkit buffers
-                encoder.clear_buffer(state.bukkit_count_buffer.as_ref().unwrap(), 0, None);
-                encoder.clear_buffer(state.bukkit_count_buffer2.as_ref().unwrap(), 0, None);
-                encoder.clear_buffer(state.bukkit_thread_data.as_ref().unwrap(), 0, None);
-                encoder.clear_buffer(state.bukkit_particle_data.as_ref().unwrap(), 0, None);
-                encoder.clear_buffer(state.bukkit_particle_allocator.as_ref().unwrap(), 0, None);
-                encoder.copy_buffer_to_buffer(
-                    state.bukkit_blank_dispatch.as_ref().unwrap(),
-                    0,
-                    state.bukkit_dispatch.as_ref().unwrap(),
-                    0,
-                    state.bukkit_dispatch.as_ref().unwrap().size(),
-                );
+            let bk_alloc_uniform = state.uniform(uniform_idx);
+            queue.write_buffer(bk_alloc_uniform, 0, bytemuck::cast_slice(&[sim_constants]));
+            uniform_idx += 1;
 
-                // Bukkit count
-                let bk_count_bg = device.create_bind_group(
-                    "bukkit_count",
-                    &BindGroupLayout::from(pipelines.bukkit_count.get_bind_group_layout(0)),
-                    &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: sim_uniform.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: state
-                                .particle_count_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 2,
-                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 3,
-                            resource: state
-                                .bukkit_count_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                    ],
-                );
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("bukkit_count"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipelines.bukkit_count);
-                    pass.set_bind_group(0, &bk_count_bg, &[]);
-                    pass.dispatch_workgroups_indirect(
-                        state.particle_sim_dispatch_buffer.as_ref().unwrap(),
-                        0,
-                    );
-                }
+            let bk_alloc_bg = device.create_bind_group(
+                "bukkit_allocate",
+                &BindGroupLayout::from(pipelines.bukkit_allocate.get_bind_group_layout(0)),
+                &[
+                    BindGroupEntry { binding: 0, resource: bk_alloc_uniform.as_entire_binding() },
+                    BindGroupEntry { binding: 1, resource: state.bukkit_count_buf().as_entire_binding() },
+                    BindGroupEntry { binding: 2, resource: state.bukkit_dispatch_buf().as_entire_binding() },
+                    BindGroupEntry { binding: 3, resource: state.bukkit_thread_data_buf().as_entire_binding() },
+                    BindGroupEntry { binding: 4, resource: state.bukkit_particle_allocator_buf().as_entire_binding() },
+                    BindGroupEntry { binding: 5, resource: state.bukkit_index_start_buf().as_entire_binding() },
+                ],
+            );
+            {
+                let bk_dispatch_x = div_up(data.bukkit_count_x, GRID_DISPATCH_SIZE);
+                let bk_dispatch_y = div_up(data.bukkit_count_y, GRID_DISPATCH_SIZE);
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("bukkit_allocate"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&pipelines.bukkit_allocate);
+                pass.set_bind_group(0, &bk_alloc_bg, &[]);
+                pass.dispatch_workgroups(bk_dispatch_x, bk_dispatch_y, 1);
+            }
 
-                // Bukkit allocate
-                let bk_alloc_bg = device.create_bind_group(
-                    "bukkit_allocate",
-                    &BindGroupLayout::from(pipelines.bukkit_allocate.get_bind_group_layout(0)),
-                    &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: sim_uniform.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: state
-                                .bukkit_count_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 2,
-                            resource: state.bukkit_dispatch.as_ref().unwrap().as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 3,
-                            resource: state
-                                .bukkit_thread_data
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 4,
-                            resource: state
-                                .bukkit_particle_allocator
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 5,
-                            resource: state
-                                .bukkit_index_start
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                    ],
-                );
-                {
-                    let bk_dispatch_x = div_up(data.bukkit_count_x, GRID_DISPATCH_SIZE);
-                    let bk_dispatch_y = div_up(data.bukkit_count_y, GRID_DISPATCH_SIZE);
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("bukkit_allocate"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipelines.bukkit_allocate);
-                    pass.set_bind_group(0, &bk_alloc_bg, &[]);
-                    pass.dispatch_workgroups(bk_dispatch_x, bk_dispatch_y, 1);
-                }
+            let bk_insert_uniform = state.uniform(uniform_idx);
+            queue.write_buffer(bk_insert_uniform, 0, bytemuck::cast_slice(&[sim_constants]));
+            uniform_idx += 1;
 
-                // Bukkit insert
-                let bk_insert_bg = device.create_bind_group(
-                    "bukkit_insert",
-                    &BindGroupLayout::from(pipelines.bukkit_insert.get_bind_group_layout(0)),
-                    &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: sim_uniform.as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: state
-                                .particle_count_buffer
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 2,
-                            resource: state
-                                .bukkit_count_buffer2
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 3,
-                            resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 4,
-                            resource: state
-                                .bukkit_particle_data
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                        BindGroupEntry {
-                            binding: 5,
-                            resource: state
-                                .bukkit_index_start
-                                .as_ref()
-                                .unwrap()
-                                .as_entire_binding(),
-                        },
-                    ],
-                );
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("bukkit_insert"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipelines.bukkit_insert);
-                    pass.set_bind_group(0, &bk_insert_bg, &[]);
-                    pass.dispatch_workgroups_indirect(
-                        state.particle_sim_dispatch_buffer.as_ref().unwrap(),
-                        0,
-                    );
-                }
+            let bk_insert_bg = device.create_bind_group(
+                "bukkit_insert",
+                &BindGroupLayout::from(pipelines.bukkit_insert.get_bind_group_layout(0)),
+                &[
+                    BindGroupEntry { binding: 0, resource: bk_insert_uniform.as_entire_binding() },
+                    BindGroupEntry { binding: 1, resource: state.particle_count().as_entire_binding() },
+                    BindGroupEntry { binding: 2, resource: state.bukkit_count_buf2().as_entire_binding() },
+                    BindGroupEntry { binding: 3, resource: state.particles().as_entire_binding() },
+                    BindGroupEntry { binding: 4, resource: state.bukkit_particle_data_buf().as_entire_binding() },
+                    BindGroupEntry { binding: 5, resource: state.bukkit_index_start_buf().as_entire_binding() },
+                ],
+            );
+            {
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("bukkit_insert"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&pipelines.bukkit_insert);
+                pass.set_bind_group(0, &bk_insert_bg, &[]);
+                pass.dispatch_workgroups_indirect(state.sim_dispatch(), 0);
             }
 
             substep_index += 1;
@@ -626,14 +444,8 @@ impl Node for PbmpmNode {
                 "particle_render",
                 &BindGroupLayout::from(pipelines.particle_render.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: render_uniform.as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: state.particle_buffer.as_ref().unwrap().as_entire_binding(),
-                    },
+                    BindGroupEntry { binding: 0, resource: render_uniform.as_entire_binding() },
+                    BindGroupEntry { binding: 1, resource: state.particles().as_entire_binding() },
                 ],
             );
 
@@ -655,7 +467,7 @@ impl Node for PbmpmNode {
                 });
                 pass.set_pipeline(&pipelines.particle_render);
                 pass.set_bind_group(0, &render_bg, &[]);
-                pass.draw_indirect(state.particle_render_dispatch_buffer.as_ref().unwrap(), 0);
+                pass.draw_indirect(state.render_dispatch(), 0);
             }
         }
 
@@ -663,38 +475,34 @@ impl Node for PbmpmNode {
         // Even frames: map staging buffer (contains data from previous copy), read, unmap
         // Odd frames: copy particle count to staging buffer
         // This ensures we never copy to a mapped buffer.
-        if let (Some(count_buf), Some(staging_buf)) =
-            (&state.particle_count_buffer, &state.particle_count_staging)
-        {
-            this.readback_frame += 1;
-            if this.readback_frame.is_multiple_of(60) {
-                // Phase 1: read from staging (data from a previous copy)
-                let particle_count = data.particle_count.clone();
-                let staging = staging_buf.clone();
-                let staging2 = staging.clone();
-                device.map_buffer(&staging.slice(..), MapMode::Read, move |result| {
-                    if result.is_ok() {
-                        let mapped = staging2.slice(..).get_mapped_range();
-                        if mapped.len() >= 4 {
-                            let count =
-                                u32::from_le_bytes([mapped[0], mapped[1], mapped[2], mapped[3]]);
-                            particle_count
-                                .0
-                                .store(count.min(MAX_PARTICLE_COUNT), Ordering::Relaxed);
-                        }
-                        drop(mapped);
-                        staging2.unmap();
+        this.readback_frame += 1;
+        if this.readback_frame.is_multiple_of(60) {
+            // Phase 1: read from staging (data from a previous copy)
+            let particle_count = data.particle_count.clone();
+            let staging = state.particle_count_staging_buf().clone();
+            let staging2 = staging.clone();
+            device.map_buffer(&staging.slice(..), MapMode::Read, move |result| {
+                if result.is_ok() {
+                    let mapped = staging2.slice(..).get_mapped_range();
+                    if mapped.len() >= 4 {
+                        let count =
+                            u32::from_le_bytes([mapped[0], mapped[1], mapped[2], mapped[3]]);
+                        particle_count
+                            .0
+                            .store(count.min(MAX_PARTICLE_COUNT), Ordering::Relaxed);
                     }
-                });
-                // Poll to complete synchronously
-                let _ = device.wgpu_device().poll(PollType::Wait {
-                    submission_index: None,
-                    timeout: None,
-                });
-            } else if this.readback_frame % 60 == 30 {
-                // Phase 2: copy particle count to staging (will be read in phase 1 later)
-                encoder.copy_buffer_to_buffer(count_buf, 0, staging_buf, 0, 16);
-            }
+                    drop(mapped);
+                    staging2.unmap();
+                }
+            });
+            // Poll to complete synchronously
+            let _ = device.wgpu_device().poll(PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            });
+        } else if this.readback_frame % 60 == 30 {
+            // Phase 2: copy particle count to staging (will be read in phase 1 later)
+            encoder.copy_buffer_to_buffer(state.particle_count(), 0, state.particle_count_staging_buf(), 0, 16);
         }
 
         Ok(())

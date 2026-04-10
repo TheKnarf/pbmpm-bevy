@@ -34,6 +34,14 @@ pub struct GpuSimState {
 
     // Staging buffer for particle count readback
     pub particle_count_staging: Option<Buffer>,
+
+    // Pool of persistent uniform buffers, one per dispatch in a frame.
+    // Reused across frames; grows as needed.
+    pub uniform_pool: Vec<Buffer>,
+
+    // Persistent shape storage buffer (resized as the shape count changes).
+    pub shape_buffer: Option<Buffer>,
+    pub shape_buffer_capacity: u32,
 }
 
 impl GpuSimState {
@@ -157,6 +165,57 @@ impl GpuSimState {
 
         self.initialized = true;
     }
+
+    // Accessors that unwrap the Option<Buffer> fields. After `initialize` they
+    // are always Some, so unwrapping is safe in all consumers.
+    #[inline] pub fn particles(&self) -> &Buffer { self.particle_buffer.as_ref().unwrap() }
+    #[inline] pub fn particle_count(&self) -> &Buffer { self.particle_count_buffer.as_ref().unwrap() }
+    #[inline] pub fn sim_dispatch(&self) -> &Buffer { self.particle_sim_dispatch_buffer.as_ref().unwrap() }
+    #[inline] pub fn render_dispatch(&self) -> &Buffer { self.particle_render_dispatch_buffer.as_ref().unwrap() }
+    #[inline] pub fn free_indices(&self) -> &Buffer { self.particle_free_indices_buffer.as_ref().unwrap() }
+    #[inline] pub fn grid(&self, idx: usize) -> &Buffer { self.grid_buffers[idx].as_ref().unwrap() }
+    #[inline] pub fn bukkit_count_buf(&self) -> &Buffer { self.bukkit_count_buffer.as_ref().unwrap() }
+    #[inline] pub fn bukkit_count_buf2(&self) -> &Buffer { self.bukkit_count_buffer2.as_ref().unwrap() }
+    #[inline] pub fn bukkit_thread_data_buf(&self) -> &Buffer { self.bukkit_thread_data.as_ref().unwrap() }
+    #[inline] pub fn bukkit_particle_data_buf(&self) -> &Buffer { self.bukkit_particle_data.as_ref().unwrap() }
+    #[inline] pub fn bukkit_dispatch_buf(&self) -> &Buffer { self.bukkit_dispatch.as_ref().unwrap() }
+    #[inline] pub fn bukkit_blank_dispatch_buf(&self) -> &Buffer { self.bukkit_blank_dispatch.as_ref().unwrap() }
+    #[inline] pub fn bukkit_particle_allocator_buf(&self) -> &Buffer { self.bukkit_particle_allocator.as_ref().unwrap() }
+    #[inline] pub fn bukkit_index_start_buf(&self) -> &Buffer { self.bukkit_index_start.as_ref().unwrap() }
+    #[inline] pub fn particle_count_staging_buf(&self) -> &Buffer { self.particle_count_staging.as_ref().unwrap() }
+
+    /// Ensure the uniform pool has at least `count` buffers (grow if needed).
+    pub fn ensure_uniform_pool(&mut self, device: &RenderDevice, count: usize, size: u64) {
+        while self.uniform_pool.len() < count {
+            self.uniform_pool.push(device.create_buffer(&BufferDescriptor {
+                label: Some("sim_uniform_pool"),
+                size,
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+    }
+
+    #[inline] pub fn uniform(&self, idx: usize) -> &Buffer { &self.uniform_pool[idx] }
+
+    /// Ensure the persistent shape buffer is large enough for `shape_count` shapes.
+    /// Reallocates only when the count exceeds current capacity.
+    pub fn ensure_shape_buffer(&mut self, device: &RenderDevice, shape_count: u32, stride: u64) {
+        let needed = shape_count.max(1);
+        if self.shape_buffer.is_none() || needed > self.shape_buffer_capacity {
+            // Grow with some headroom to avoid frequent reallocation.
+            let new_capacity = needed.next_power_of_two().max(8);
+            self.shape_buffer = Some(device.create_buffer(&BufferDescriptor {
+                label: Some("shapes"),
+                size: stride * new_capacity as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+            self.shape_buffer_capacity = new_capacity;
+        }
+    }
+
+    #[inline] pub fn shape_buf(&self) -> &Buffer { self.shape_buffer.as_ref().unwrap() }
 }
 
 fn create_4u32_buffer(
