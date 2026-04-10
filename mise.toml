@@ -1,0 +1,3 @@
+[tasks.setup-hooks]
+description = "Activate the repo's git hooks (.hooks/)"
+run = "git config core.hooksPath .hooks"
