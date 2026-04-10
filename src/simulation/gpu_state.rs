@@ -168,35 +168,84 @@ impl GpuSimState {
 
     // Accessors that unwrap the Option<Buffer> fields. After `initialize` they
     // are always Some, so unwrapping is safe in all consumers.
-    #[inline] pub fn particles(&self) -> &Buffer { self.particle_buffer.as_ref().unwrap() }
-    #[inline] pub fn particle_count(&self) -> &Buffer { self.particle_count_buffer.as_ref().unwrap() }
-    #[inline] pub fn sim_dispatch(&self) -> &Buffer { self.particle_sim_dispatch_buffer.as_ref().unwrap() }
-    #[inline] pub fn render_dispatch(&self) -> &Buffer { self.particle_render_dispatch_buffer.as_ref().unwrap() }
-    #[inline] pub fn free_indices(&self) -> &Buffer { self.particle_free_indices_buffer.as_ref().unwrap() }
-    #[inline] pub fn grid(&self, idx: usize) -> &Buffer { self.grid_buffers[idx].as_ref().unwrap() }
-    #[inline] pub fn bukkit_count_buf(&self) -> &Buffer { self.bukkit_count_buffer.as_ref().unwrap() }
-    #[inline] pub fn bukkit_count_buf2(&self) -> &Buffer { self.bukkit_count_buffer2.as_ref().unwrap() }
-    #[inline] pub fn bukkit_thread_data_buf(&self) -> &Buffer { self.bukkit_thread_data.as_ref().unwrap() }
-    #[inline] pub fn bukkit_particle_data_buf(&self) -> &Buffer { self.bukkit_particle_data.as_ref().unwrap() }
-    #[inline] pub fn bukkit_dispatch_buf(&self) -> &Buffer { self.bukkit_dispatch.as_ref().unwrap() }
-    #[inline] pub fn bukkit_blank_dispatch_buf(&self) -> &Buffer { self.bukkit_blank_dispatch.as_ref().unwrap() }
-    #[inline] pub fn bukkit_particle_allocator_buf(&self) -> &Buffer { self.bukkit_particle_allocator.as_ref().unwrap() }
-    #[inline] pub fn bukkit_index_start_buf(&self) -> &Buffer { self.bukkit_index_start.as_ref().unwrap() }
-    #[inline] pub fn particle_count_staging_buf(&self) -> &Buffer { self.particle_count_staging.as_ref().unwrap() }
+    #[inline]
+    pub fn particles(&self) -> &Buffer {
+        self.particle_buffer.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn particle_count(&self) -> &Buffer {
+        self.particle_count_buffer.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn sim_dispatch(&self) -> &Buffer {
+        self.particle_sim_dispatch_buffer.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn render_dispatch(&self) -> &Buffer {
+        self.particle_render_dispatch_buffer.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn free_indices(&self) -> &Buffer {
+        self.particle_free_indices_buffer.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn grid(&self, idx: usize) -> &Buffer {
+        self.grid_buffers[idx].as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_count_buf(&self) -> &Buffer {
+        self.bukkit_count_buffer.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_count_buf2(&self) -> &Buffer {
+        self.bukkit_count_buffer2.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_thread_data_buf(&self) -> &Buffer {
+        self.bukkit_thread_data.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_particle_data_buf(&self) -> &Buffer {
+        self.bukkit_particle_data.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_dispatch_buf(&self) -> &Buffer {
+        self.bukkit_dispatch.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_blank_dispatch_buf(&self) -> &Buffer {
+        self.bukkit_blank_dispatch.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_particle_allocator_buf(&self) -> &Buffer {
+        self.bukkit_particle_allocator.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn bukkit_index_start_buf(&self) -> &Buffer {
+        self.bukkit_index_start.as_ref().unwrap()
+    }
+    #[inline]
+    pub fn particle_count_staging_buf(&self) -> &Buffer {
+        self.particle_count_staging.as_ref().unwrap()
+    }
 
     /// Ensure the uniform pool has at least `count` buffers (grow if needed).
     pub fn ensure_uniform_pool(&mut self, device: &RenderDevice, count: usize, size: u64) {
         while self.uniform_pool.len() < count {
-            self.uniform_pool.push(device.create_buffer(&BufferDescriptor {
-                label: Some("sim_uniform_pool"),
-                size,
-                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
+            self.uniform_pool
+                .push(device.create_buffer(&BufferDescriptor {
+                    label: Some("sim_uniform_pool"),
+                    size,
+                    usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }));
         }
     }
 
-    #[inline] pub fn uniform(&self, idx: usize) -> &Buffer { &self.uniform_pool[idx] }
+    #[inline]
+    pub fn uniform(&self, idx: usize) -> &Buffer {
+        &self.uniform_pool[idx]
+    }
 
     /// Ensure the persistent shape buffer is large enough for `shape_count` shapes.
     /// Reallocates only when the count exceeds current capacity.
@@ -215,7 +264,10 @@ impl GpuSimState {
         }
     }
 
-    #[inline] pub fn shape_buf(&self) -> &Buffer { self.shape_buffer.as_ref().unwrap() }
+    #[inline]
+    pub fn shape_buf(&self) -> &Buffer {
+        self.shape_buffer.as_ref().unwrap()
+    }
 }
 
 fn create_4u32_buffer(

@@ -213,7 +213,11 @@ impl Node for PbmpmNode {
             shapes_owned.len() as u32,
             std::mem::size_of::<SimShapeGpu>() as u64,
         );
-        queue.write_buffer(this.state.shape_buf(), 0, bytemuck::cast_slice(&shapes_owned));
+        queue.write_buffer(
+            this.state.shape_buf(),
+            0,
+            bytemuck::cast_slice(&shapes_owned),
+        );
 
         // Pre-allocate enough uniform buffers for this frame's substeps.
         // Each substep needs: iteration_count (g2p2g) + 4 (emit, bukkit_count, bukkit_allocate, bukkit_insert)
@@ -225,7 +229,8 @@ impl Node for PbmpmNode {
         let uniforms_per_substep = data.params.iteration_count as usize + 4;
         let total_uniforms = (substep_count as usize * uniforms_per_substep).max(1);
         let uniform_size = std::mem::size_of::<SimConstantsGpu>() as u64;
-        this.state.ensure_uniform_pool(device, total_uniforms, uniform_size);
+        this.state
+            .ensure_uniform_pool(device, total_uniforms, uniform_size);
 
         let mut uniform_idx: usize = 0;
         let state = &this.state;
@@ -259,15 +264,42 @@ impl Node for PbmpmNode {
                     "g2p2g",
                     &BindGroupLayout::from(pipelines.g2p2g.get_bind_group_layout(0)),
                     &[
-                        BindGroupEntry { binding: 0, resource: sim_uniform.as_entire_binding() },
-                        BindGroupEntry { binding: 1, resource: state.particles().as_entire_binding() },
-                        BindGroupEntry { binding: 2, resource: current_grid.as_entire_binding() },
-                        BindGroupEntry { binding: 3, resource: next_grid.as_entire_binding() },
-                        BindGroupEntry { binding: 4, resource: next_next_grid.as_entire_binding() },
-                        BindGroupEntry { binding: 5, resource: state.bukkit_thread_data_buf().as_entire_binding() },
-                        BindGroupEntry { binding: 6, resource: state.bukkit_particle_data_buf().as_entire_binding() },
-                        BindGroupEntry { binding: 7, resource: state.shape_buf().as_entire_binding() },
-                        BindGroupEntry { binding: 8, resource: state.free_indices().as_entire_binding() },
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: sim_uniform.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: state.particles().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 2,
+                            resource: current_grid.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 3,
+                            resource: next_grid.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 4,
+                            resource: next_next_grid.as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 5,
+                            resource: state.bukkit_thread_data_buf().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 6,
+                            resource: state.bukkit_particle_data_buf().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 7,
+                            resource: state.shape_buf().as_entire_binding(),
+                        },
+                        BindGroupEntry {
+                            binding: 8,
+                            resource: state.free_indices().as_entire_binding(),
+                        },
                     ],
                 );
 
@@ -292,12 +324,30 @@ impl Node for PbmpmNode {
                 "particle_emit",
                 &BindGroupLayout::from(pipelines.particle_emit.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry { binding: 0, resource: emit_uniform.as_entire_binding() },
-                    BindGroupEntry { binding: 1, resource: state.particle_count().as_entire_binding() },
-                    BindGroupEntry { binding: 2, resource: state.particles().as_entire_binding() },
-                    BindGroupEntry { binding: 3, resource: state.shape_buf().as_entire_binding() },
-                    BindGroupEntry { binding: 4, resource: state.free_indices().as_entire_binding() },
-                    BindGroupEntry { binding: 5, resource: grid.as_entire_binding() },
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: emit_uniform.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: state.particle_count().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: state.particles().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: state.shape_buf().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: state.free_indices().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 5,
+                        resource: grid.as_entire_binding(),
+                    },
                 ],
             );
 
@@ -318,9 +368,18 @@ impl Node for PbmpmNode {
                 "set_indirect_args",
                 &BindGroupLayout::from(pipelines.set_indirect_args.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry { binding: 0, resource: state.particle_count().as_entire_binding() },
-                    BindGroupEntry { binding: 1, resource: state.sim_dispatch().as_entire_binding() },
-                    BindGroupEntry { binding: 2, resource: state.render_dispatch().as_entire_binding() },
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: state.particle_count().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: state.sim_dispatch().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: state.render_dispatch().as_entire_binding(),
+                    },
                 ],
             );
             {
@@ -358,10 +417,22 @@ impl Node for PbmpmNode {
                 "bukkit_count",
                 &BindGroupLayout::from(pipelines.bukkit_count.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry { binding: 0, resource: bk_count_uniform.as_entire_binding() },
-                    BindGroupEntry { binding: 1, resource: state.particle_count().as_entire_binding() },
-                    BindGroupEntry { binding: 2, resource: state.particles().as_entire_binding() },
-                    BindGroupEntry { binding: 3, resource: state.bukkit_count_buf().as_entire_binding() },
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: bk_count_uniform.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: state.particle_count().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: state.particles().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: state.bukkit_count_buf().as_entire_binding(),
+                    },
                 ],
             );
             {
@@ -382,12 +453,30 @@ impl Node for PbmpmNode {
                 "bukkit_allocate",
                 &BindGroupLayout::from(pipelines.bukkit_allocate.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry { binding: 0, resource: bk_alloc_uniform.as_entire_binding() },
-                    BindGroupEntry { binding: 1, resource: state.bukkit_count_buf().as_entire_binding() },
-                    BindGroupEntry { binding: 2, resource: state.bukkit_dispatch_buf().as_entire_binding() },
-                    BindGroupEntry { binding: 3, resource: state.bukkit_thread_data_buf().as_entire_binding() },
-                    BindGroupEntry { binding: 4, resource: state.bukkit_particle_allocator_buf().as_entire_binding() },
-                    BindGroupEntry { binding: 5, resource: state.bukkit_index_start_buf().as_entire_binding() },
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: bk_alloc_uniform.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: state.bukkit_count_buf().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: state.bukkit_dispatch_buf().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: state.bukkit_thread_data_buf().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: state.bukkit_particle_allocator_buf().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 5,
+                        resource: state.bukkit_index_start_buf().as_entire_binding(),
+                    },
                 ],
             );
             {
@@ -410,12 +499,30 @@ impl Node for PbmpmNode {
                 "bukkit_insert",
                 &BindGroupLayout::from(pipelines.bukkit_insert.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry { binding: 0, resource: bk_insert_uniform.as_entire_binding() },
-                    BindGroupEntry { binding: 1, resource: state.particle_count().as_entire_binding() },
-                    BindGroupEntry { binding: 2, resource: state.bukkit_count_buf2().as_entire_binding() },
-                    BindGroupEntry { binding: 3, resource: state.particles().as_entire_binding() },
-                    BindGroupEntry { binding: 4, resource: state.bukkit_particle_data_buf().as_entire_binding() },
-                    BindGroupEntry { binding: 5, resource: state.bukkit_index_start_buf().as_entire_binding() },
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: bk_insert_uniform.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: state.particle_count().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: state.bukkit_count_buf2().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: state.particles().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: state.bukkit_particle_data_buf().as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 5,
+                        resource: state.bukkit_index_start_buf().as_entire_binding(),
+                    },
                 ],
             );
             {
@@ -444,8 +551,14 @@ impl Node for PbmpmNode {
                 "particle_render",
                 &BindGroupLayout::from(pipelines.particle_render.get_bind_group_layout(0)),
                 &[
-                    BindGroupEntry { binding: 0, resource: render_uniform.as_entire_binding() },
-                    BindGroupEntry { binding: 1, resource: state.particles().as_entire_binding() },
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: render_uniform.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: state.particles().as_entire_binding(),
+                    },
                 ],
             );
 
@@ -502,7 +615,13 @@ impl Node for PbmpmNode {
             });
         } else if this.readback_frame % 60 == 30 {
             // Phase 2: copy particle count to staging (will be read in phase 1 later)
-            encoder.copy_buffer_to_buffer(state.particle_count(), 0, state.particle_count_staging_buf(), 0, 16);
+            encoder.copy_buffer_to_buffer(
+                state.particle_count(),
+                0,
+                state.particle_count_staging_buf(),
+                0,
+                16,
+            );
         }
 
         Ok(())

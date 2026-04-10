@@ -21,12 +21,6 @@ fn shape_to_world(pos: Vec2, window_w: f32, window_h: f32) -> Vec2 {
     Vec2::new(pos.x - window_w / 2.0, window_h / 2.0 - pos.y)
 }
 
-/// Convert Bevy screen-space cursor position (origin top-left, Y down) to shape pixel-space.
-/// In Bevy 0.18, `Window::cursor_position()` returns (0,0) at top-left, Y down.
-fn cursor_to_shape_space(cursor: Vec2) -> Vec2 {
-    cursor // Same coordinate system
-}
-
 /// Distance from a point to a circle border.
 fn dist_to_circle(point: Vec2, center: Vec2, radius: f32) -> f32 {
     ((point - center).length() - radius).abs()
@@ -134,7 +128,7 @@ pub fn shape_mouse_interaction(
         return;
     }
 
-    let mouse_pos = cursor_to_shape_space(cursor);
+    let mouse_pos = cursor;
     let selection_range = 20.0;
 
     // Hover detection
@@ -210,6 +204,14 @@ pub fn shape_keyboard(
         }
     }
 
+    // Spawn a shape, give it a fresh id, and select it.
+    let spawn_and_select =
+        |commands: &mut Commands, interaction: &mut ShapeInteraction, mut shape: SimShapeData| {
+            shape.id = format!("shape{}", shapes.iter().count());
+            let entity = commands.spawn(shape).id();
+            interaction.selected = Some(entity);
+        };
+
     // Duplicate selected shape (Ctrl+D)
     if keys.just_pressed(KeyCode::KeyD)
         && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight))
@@ -220,11 +222,7 @@ pub fn shape_keyboard(
                 // Offset the duplicate slightly
                 new_shape.position.x += 20.0;
                 new_shape.position.y += 20.0;
-                // Generate a new id
-                let count = shapes.iter().count();
-                new_shape.id = format!("shape{}", count);
-                let new_entity = commands.spawn(new_shape).id();
-                interaction.selected = Some(new_entity);
+                spawn_and_select(&mut commands, &mut interaction, new_shape);
             }
         }
     }
@@ -236,12 +234,9 @@ pub fn shape_keyboard(
         let Ok(window) = windows.single() else {
             return;
         };
-        let cx = window.width() / 2.0;
-        let cy = window.height() / 2.0;
-        let count = shapes.iter().count();
         let new_shape = SimShapeData {
-            id: format!("shape{}", count),
-            position: Vec2::new(cx, cy),
+            id: String::new(),
+            position: Vec2::new(window.width() / 2.0, window.height() / 2.0),
             half_size: Vec2::new(50.0, 50.0),
             rotation: 0.0,
             shape_type: ShapeType::Box,
@@ -251,7 +246,6 @@ pub fn shape_keyboard(
             emission_speed: 0.0,
             radius: 50.0,
         };
-        let new_entity = commands.spawn(new_shape).id();
-        interaction.selected = Some(new_entity);
+        spawn_and_select(&mut commands, &mut interaction, new_shape);
     }
 }

@@ -172,7 +172,10 @@ pub enum StringOrNumber {
 impl StringOrNumber {
     pub fn as_f32(&self) -> f32 {
         match self {
-            StringOrNumber::String(s) => s.parse().unwrap_or(0.0),
+            StringOrNumber::String(s) => s.parse().unwrap_or_else(|e| {
+                warn!("Failed to parse scene value {s:?} as float: {e}");
+                0.0
+            }),
             StringOrNumber::Float(f) => *f as f32,
             StringOrNumber::Int(i) => *i as f32,
             StringOrNumber::None => 0.0,

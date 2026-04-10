@@ -890,27 +890,18 @@ pub fn update_shape_info(
             let mat = shape.emit_material.label();
 
             // Update button labels
-            if let Ok(children) = q_type_btn.single() {
-                for child in children.iter() {
-                    if let Ok(mut t) = q_text.get_mut(child) {
-                        t.0 = shape_type.to_string();
+            let mut set_label = |children: Result<&Children, _>, label: &str| {
+                if let Ok(children) = children {
+                    for child in children.iter() {
+                        if let Ok(mut t) = q_text.get_mut(child) {
+                            t.0 = label.to_string();
+                        }
                     }
                 }
-            }
-            if let Ok(children) = q_func_btn.single() {
-                for child in children.iter() {
-                    if let Ok(mut t) = q_text.get_mut(child) {
-                        t.0 = func.to_string();
-                    }
-                }
-            }
-            if let Ok(children) = q_mat_btn.single() {
-                for child in children.iter() {
-                    if let Ok(mut t) = q_text.get_mut(child) {
-                        t.0 = mat.to_string();
-                    }
-                }
-            }
+            };
+            set_label(q_type_btn.single(), shape_type);
+            set_label(q_func_btn.single(), func);
+            set_label(q_mat_btn.single(), mat);
 
             format!("Shape {} [{}] {} {}", shape.id, shape_type, func, mat)
         } else {

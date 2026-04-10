@@ -29,12 +29,20 @@ pub struct SceneSetting {
 
 pub fn load_manifest() -> Vec<SceneManifestEntry> {
     let manifest_path = std::path::Path::new("assets/scenes/manifest.json");
-    if !manifest_path.exists() {
-        warn!("Scene manifest not found at {:?}", manifest_path);
-        return Vec::new();
+    let data = match std::fs::read_to_string(manifest_path) {
+        Ok(d) => d,
+        Err(e) => {
+            warn!("Failed to read scene manifest at {manifest_path:?}: {e}");
+            return Vec::new();
+        }
+    };
+    match serde_json::from_str(&data) {
+        Ok(entries) => entries,
+        Err(e) => {
+            warn!("Failed to parse scene manifest: {e}");
+            Vec::new()
+        }
     }
-    let data = std::fs::read_to_string(manifest_path).unwrap();
-    serde_json::from_str(&data).unwrap_or_default()
 }
 
 pub fn load_scene(path: &str) -> Option<SceneFile> {
