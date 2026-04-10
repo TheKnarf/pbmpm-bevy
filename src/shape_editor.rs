@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::mouse_input::MouseConfig;
-use crate::ui::UI_PANEL_WIDTH;
+use crate::ui::{cursor_over_panel, UiPanelVisible};
 use pbmpm_bevy::*;
 
 /// Tracks shape selection and dragging state.
@@ -116,6 +116,7 @@ pub fn draw_shape_overlay(
 pub fn shape_mouse_interaction(
     mut interaction: ResMut<ShapeInteraction>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    panel: Res<UiPanelVisible>,
     windows: Query<&Window>,
     mut shapes: Query<(Entity, &mut SimShapeData)>,
 ) {
@@ -126,8 +127,8 @@ pub fn shape_mouse_interaction(
         return;
     };
 
-    // Don't interact if cursor is over the UI panel
-    if cursor.x > window.width() - UI_PANEL_WIDTH {
+    // Don't interact if cursor is over the visible UI panel
+    if cursor_over_panel(cursor.x, window.width(), &panel) {
         interaction.hovered = None;
         return;
     }

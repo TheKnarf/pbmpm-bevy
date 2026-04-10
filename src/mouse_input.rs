@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use pbmpm_bevy::*;
 
 use crate::shape_editor::ShapeInteraction;
-use crate::ui::UI_PANEL_WIDTH;
+use crate::ui::{cursor_over_panel, UiPanelVisible};
 
 /// User-facing settings for the mouse interaction. Held in screen-space
 /// units (pixels) and translated to sim-space when forwarding to the
@@ -29,10 +29,12 @@ impl Default for MouseConfig {
 /// Update the simulation's `SimInteraction` and `SimViewport` resources
 /// from the current window cursor and mouse buttons. This is the only
 /// system that bridges OS input → physics input.
+#[allow(clippy::too_many_arguments)]
 pub fn drive_sim_interaction(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     shape_interaction: Res<ShapeInteraction>,
     config: Res<MouseConfig>,
+    panel: Res<UiPanelVisible>,
     time: Res<Time>,
     windows: Query<&Window>,
     mut sim_interaction: ResMut<SimInteraction>,
@@ -63,10 +65,9 @@ pub fn drive_sim_interaction(
         Vec2::ZERO
     };
 
-    let over_panel = cursor.x > res_w - UI_PANEL_WIDTH;
     let active = mouse_buttons.pressed(MouseButton::Left)
         && shape_interaction.dragging.is_none()
-        && !over_panel;
+        && !cursor_over_panel(cursor.x, res_w, &panel);
 
     sim_interaction.active = active;
     sim_interaction.mode = config.mode;

@@ -13,7 +13,7 @@ use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use mouse_input::MouseConfig;
 use pbmpm_bevy::*;
 use scene::*;
-use ui::UI_PANEL_WIDTH;
+use ui::{cursor_over_panel, UiPanelVisible};
 
 fn main() {
     App::new()
@@ -49,6 +49,7 @@ fn main() {
         .add_plugins(PbmpmPlugin)
         .init_resource::<SceneManifest>()
         .init_resource::<MouseConfig>()
+        .init_resource::<UiPanelVisible>()
         .init_resource::<shape_editor::ShapeInteraction>()
         .add_observer(ui::on_scroll)
         .add_observer(scene::on_load_scene)
@@ -95,14 +96,14 @@ fn setup(mut commands: Commands, mut manifest: ResMut<SceneManifest>) {
 fn input_system(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window>,
+    panel: Res<UiPanelVisible>,
     mut mouse_config: ResMut<MouseConfig>,
 ) {
     let Ok(window) = windows.single() else { return };
     let cursor = window.cursor_position().unwrap_or_default();
 
     // Scroll wheel adjusts interaction radius (only when not over UI panel)
-    let over_panel = cursor.x > window.width() - UI_PANEL_WIDTH;
-    if scroll.delta.y != 0.0 && !over_panel {
+    if scroll.delta.y != 0.0 && !cursor_over_panel(cursor.x, window.width(), &panel) {
         mouse_config.radius_pixels =
             (mouse_config.radius_pixels * 1.01_f32.powf(scroll.delta.y)).clamp(10.0, 1000.0);
     }

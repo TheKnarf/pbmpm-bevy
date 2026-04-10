@@ -19,6 +19,26 @@ use pbmpm_bevy::*;
 /// Width of the right-side UI panel in pixels.
 pub const UI_PANEL_WIDTH: f32 = 310.0;
 
+/// Tracks whether the right-side UI panel is currently visible. Other
+/// systems read this to decide whether the cursor is over interactive UI
+/// or over the simulation canvas.
+#[derive(Resource)]
+pub struct UiPanelVisible(pub bool);
+
+impl Default for UiPanelVisible {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
+/// Returns true if the cursor is currently over the right-side UI panel
+/// (and that panel is visible). Use this from any system that needs to
+/// know whether the cursor is interacting with the simulation canvas
+/// or with editor UI.
+pub fn cursor_over_panel(cursor_x: f32, window_width: f32, panel: &UiPanelVisible) -> bool {
+    panel.0 && cursor_x > window_width - UI_PANEL_WIDTH
+}
+
 // --- Marker components ---
 #[derive(Component)]
 pub struct GravitySlider;
@@ -914,14 +934,20 @@ pub fn update_shape_info(
 }
 
 /// Toggle UI panel visibility with backtick key
-pub fn toggle_ui(keys: Res<ButtonInput<KeyCode>>, mut q_panel: Query<&mut Node, With<UiPanel>>) {
+pub fn toggle_ui(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut q_panel: Query<&mut Node, With<UiPanel>>,
+    mut visible: ResMut<UiPanelVisible>,
+) {
     if keys.just_pressed(KeyCode::Backquote) {
         if let Ok(mut node) = q_panel.single_mut() {
-            if node.display == Display::None {
-                node.display = Display::Flex;
+            let now_visible = node.display == Display::None;
+            node.display = if now_visible {
+                Display::Flex
             } else {
-                node.display = Display::None;
-            }
+                Display::None
+            };
+            visible.0 = now_visible;
         }
     }
 }
