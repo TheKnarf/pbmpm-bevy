@@ -1,5 +1,5 @@
-use std::cell::UnsafeCell;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 
 use bevy::prelude::*;
 use bevy::render::render_graph::{Node, NodeRunError, RenderGraphContext};
@@ -52,7 +52,7 @@ impl Default for ExtractedSimData {
     }
 }
 
-/// Inner mutable state for the node, wrapped in UnsafeCell for interior mutability.
+/// Inner mutable state for the node.
 struct PbmpmNodeInner {
     pipelines: Option<PbmpmPipelines>,
     pipeline_format: Option<TextureFormat>,
@@ -63,20 +63,16 @@ struct PbmpmNodeInner {
 }
 
 /// The main render graph node that drives simulation compute + particle rendering.
-/// Uses UnsafeCell because Node::run takes &self but we need mutation.
-/// Safety: render graph nodes execute single-threaded.
+/// Uses Mutex for interior mutability since Node::run takes &self. The render
+/// graph executes nodes single-threaded so the mutex is always uncontended.
 pub struct PbmpmNode {
-    inner: UnsafeCell<PbmpmNodeInner>,
+    inner: Mutex<PbmpmNodeInner>,
 }
-
-// Safety: render graph guarantees single-threaded access to nodes
-unsafe impl Send for PbmpmNode {}
-unsafe impl Sync for PbmpmNode {}
 
 impl Default for PbmpmNode {
     fn default() -> Self {
         Self {
-            inner: UnsafeCell::new(PbmpmNodeInner {
+            inner: Mutex::new(PbmpmNodeInner {
                 pipelines: None,
                 pipeline_format: None,
                 state: GpuSimState::default(),
@@ -159,8 +155,7 @@ impl PbmpmNodeInner {
 
 impl Node for PbmpmNode {
     fn update(&mut self, world: &mut World) {
-        // Safety: we have &mut self so exclusive access is guaranteed
-        let inner = self.inner.get_mut();
+        let inner = self.inner.get_mut().unwrap();
         if inner.view_target_query.is_none() {
             inner.view_target_query = Some(world.query::<&ViewTarget>());
         }
@@ -172,8 +167,8 @@ impl Node for PbmpmNode {
         render_context: &mut RenderContext<'w>,
         world: &'w World,
     ) -> Result<(), NodeRunError> {
-        // Safety: render graph guarantees single-threaded node execution
-        let this = unsafe { &mut *self.inner.get() };
+        let mut guard = self.inner.lock().unwrap();
+        let this = &mut *guard;
 
         let data = match world.get_resource::<ExtractedSimData>() {
             Some(d) => d,
@@ -672,7 +667,7 @@ impl Node for PbmpmNode {
             (&state.particle_count_buffer, &state.particle_count_staging)
         {
             this.readback_frame += 1;
-            if this.readback_frame % 60 == 0 {
+            if this.readback_frame.is_multiple_of(60) {
                 // Phase 1: read from staging (data from a previous copy)
                 let particle_count = data.particle_count.clone();
                 let staging = staging_buf.clone();
